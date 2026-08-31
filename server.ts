@@ -294,6 +294,84 @@ async function startServer() {
     });
   });
 
+  // 5b. Yatra Endpoints (Atomic CRUD)
+  // Create Yatra
+  app.post('/api/tracker/yatras', (req, res) => {
+    const newYatra: YatraEvent = {
+      ...req.body,
+      id: req.body.id || `yatra-${Date.now()}`
+    };
+    store.yatras = [newYatra, ...store.yatras.filter(y => y.id !== newYatra.id)];
+    saveStore(req.body.updatedBy || 'Team Member', `Created Yatra "${newYatra.title}" in ${newYatra.city}`);
+    res.json({ success: true, version: store.version, yatra: newYatra, yatras: store.yatras });
+  });
+
+  // Edit Yatra
+  app.put('/api/tracker/yatras/:id', (req, res) => {
+    const yatraId = req.params.id;
+    const updatedYatra: YatraEvent = req.body;
+    store.yatras = store.yatras.map(y => y.id === yatraId ? { ...y, ...updatedYatra } : y);
+    saveStore(req.body.updatedBy || 'Team Member', `Updated Yatra "${updatedYatra.title || yatraId}"`);
+    res.json({ success: true, version: store.version, yatra: updatedYatra, yatras: store.yatras });
+  });
+
+  // Delete Yatra
+  app.delete('/api/tracker/yatras/:id', (req, res) => {
+    const yatraId = req.params.id;
+    const targetYatra = store.yatras.find(y => y.id === yatraId);
+    store.yatras = store.yatras.filter(y => y.id !== yatraId);
+
+    // Unlink from hospitals
+    if (targetYatra) {
+      store.hospitals = store.hospitals.map(h => {
+        if (targetYatra.hospitalIds && targetYatra.hospitalIds.includes(h.id)) {
+          return {
+            ...h,
+            yatraEventAttended: false,
+            yatraEventDate: undefined,
+            yatraCity: undefined,
+            yatraEventName: undefined
+          };
+        }
+        return h;
+      });
+    }
+
+    saveStore('Team Member', `Deleted Yatra "${targetYatra?.title || yatraId}"`);
+    res.json({ success: true, version: store.version, deletedId: yatraId, yatras: store.yatras });
+  });
+
+  // Assign hospitals to Yatra
+  app.post('/api/tracker/yatras/:id/assign', (req, res) => {
+    const yatraId = req.params.id;
+    const { hospitalIds } = req.body;
+    const targetYatra = store.yatras.find(y => y.id === yatraId);
+
+    if (!targetYatra || !Array.isArray(hospitalIds)) {
+      return res.status(400).json({ error: 'Invalid yatraId or hospitalIds' });
+    }
+
+    const updatedHospitalIds = Array.from(new Set([...(targetYatra.hospitalIds || []), ...hospitalIds]));
+    store.yatras = store.yatras.map(y => y.id === yatraId ? { ...y, hospitalIds: updatedHospitalIds } : y);
+
+    // Link hospitals
+    store.hospitals = store.hospitals.map(h => {
+      if (hospitalIds.includes(h.id)) {
+        return {
+          ...h,
+          yatraEventAttended: true,
+          yatraCity: targetYatra.city,
+          yatraEventDate: targetYatra.date,
+          yatraEventName: targetYatra.title
+        };
+      }
+      return h;
+    });
+
+    saveStore('Team Member', `Mapped ${hospitalIds.length} hospital(s) to Yatra "${targetYatra.title}"`);
+    res.json({ success: true, version: store.version, yatra: store.yatras.find(y => y.id === yatraId) });
+  });
+
   // 6. Reset database
   app.post('/api/tracker/reset', (req, res) => {
     store = {

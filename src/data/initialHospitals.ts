@@ -32,13 +32,13 @@ const RAW_DATA: RawRow[] = [
   { org: "Asg eye hospital bhopal", fn: "ANCHAL", ln: "SAHU", mob: "7771039336", status: "Cold", cat: "Certified", exp: "10-12-2028", urg: "", rem: "" },
   { org: "ASHAPUNJ FERTILITY & GYNAECOLOGY CENTRE", fn: "Dr teena", ln: "Gupta", mob: "97425607100", status: "Engaged", cat: "Certified", exp: "11-12-2025", urg: "ALREADY EXPIRED", rem: "Did not respond" },
   { org: "Ashoka ivf care and multi-speciality hospital", fn: "Shahid", ln: "Khan", mob: "7047996492", status: "Hot", cat: "Certified", exp: "02-11-2024", urg: "ALREADY EXPIRED", rem: "Preparation is going on. No handholding required" },
-  { org: "ASIAN MULTISPECIALITY HOSPITAL", fn: "DR RAMKISHORE DIXIT", ln: "KHAN", mob: "7225025130", status: "Application in progress", cat: "Certified", exp: "05-05-2027", urg: "Expiring 181-365 days", rem: "" },
+  { org: "ASIAN MULTISPECIALITY HOSPITAL", fn: "DR RAMKISHORE DIXIT", ln: "KHAN", mob: "7225025130", status: "Won", cat: "Accredited", exp: "05-05-2030", urg: "Expiring 181-365 days", rem: "" },
   { org: "Atal Multispeciality hospital", fn: "Abhishek", ln: "Sharma", mob: "9893461099", status: "Engaged", cat: "Not Yet Certified/Accredited", exp: "03-06-2026", urg: "ALREADY EXPIRED", rem: "Did not respond" },
   { org: "Balaji children hospital", fn: "Vaseem", ln: "Mansoori", mob: "6261034769", status: "Hot", cat: "Certified", exp: "11-05-2028", urg: "Expiring > 1 year", rem: "The Hospital is already nabh Entry Leval Certified.planing to start the process for nabh full Accreditation after 01 months." },
   { org: "BALAJI FRACTURE AND GENERAL HOSPITAL", fn: "Prashant", ln: "", mob: "7000093234", status: "Cold", cat: "Certified", exp: "14-04-2028", urg: "Expiring > 1 year", rem: "ELC just got renewed in May, hence plans to apply after this will get expired" },
   { org: "Berasia general hospital", fn: "Gopal", ln: "Meena", mob: "8269227413", status: "Cold", cat: "Certified", exp: "09-03-2024", urg: "ALREADY EXPIRED", rem: "They have got their ELC done back in May 2026. Hence will plan to apply after 1 year" },
   { org: "Bhopal Children and Multispeciality Hospital", fn: "Rajesh", ln: "Chandrakapure", mob: "8962923108", status: "Hot", cat: "Not Yet Certified/Accredited", exp: "Not found", urg: "", rem: "Preparations are undergoing, they plan to apply within 2-3 months. No hand holding required currently" },
-  { org: "Bhopal hospital and research centre", fn: "Aarti", ln: "Hariyale", mob: "9039207365", status: "Won", cat: "Accreditation under process", exp: "", urg: "", rem: "" },
+  { org: "Bhopal surgical and maternity Hospital Private Limited", fn: "Aarti", ln: "Hariyale", mob: "9039207365", status: "Won", cat: "Accredited", exp: "", urg: "", rem: "" },
   { org: "Bhopal multi-speciality Hospital", fn: "Sheehan", ln: "Saif", mob: "7000638599", status: "Engaged", cat: "Not Yet Certified/Accredited", exp: "12-04-2027", urg: "", rem: "Did not respond" },
   { org: "Birla Fertility & IVF - A Unit of CK BIRLA HEALTHCARE PVT LTD", fn: "Mahesh", ln: "Dangi", mob: "6263648557", status: "Cold", cat: "Not Yet Certified/Accredited", exp: "Not found", urg: "", rem: "Nither certified nor accredited. No plans to apply currently, no specific reason given." },
   { org: "BISONIYA HOSPITAL MATERNITY AND PLASTIC SURGERY", fn: "Dr Nidhi", ln: "Singh", mob: "9669466444", status: "Engaged", cat: "Certified", exp: "19-05-2027", urg: "Expiring 181-365 days", rem: "Did not respond" },
@@ -142,7 +142,7 @@ const RAW_DATA: RawRow[] = [
   { org: "NEOGASTROPLUS A UNIT OF GP HEALTHCARE", fn: "Dr. SHEETAL", ln: "RATHORE", mob: "7987013253", status: "Warm", cat: "Not Yet Certified/Accredited", exp: "Not found", urg: "", rem: "The hospital has just started back in May 2026. Plans to apply for ELC in next 6-7 months" },
   { org: "NEURON TRAUMA CENTER & MULTISPECIALITY HOSPITAL", fn: "Pankaj", ln: "Kumar sharma", mob: "8839725404", status: "Warm", cat: "Certified", exp: "10-01-2022", urg: "ALREADY EXPIRED", rem: "They plan to apply but are facing financial issues and plans to apply by Jan. Upon asking for training they said that once they will start they will reach out to us" },
   { org: "NEW ADARSH HOSPITAL", fn: "Manish", ln: "Chauchan", mob: "9826822876", status: "Existing", cat: "Accredited", exp: "18-06-2030", urg: "Expiring 181-365 days", rem: "Already applied in March in 2026, Waiting for certificate" },
-  { org: "Nilay Hospital", fn: "Dr Ankit", ln: "Chouhan", mob: "7415418159", status: "Application in progress", cat: "Certified", exp: "21-09-2024", urg: "ALREADY EXPIRED", rem: "" },
+  { org: "Nilay Hospital", fn: "Dr Ankit", ln: "Chouhan", mob: "7415418159", status: "Won", cat: "Certified", exp: "21-09-2024", urg: "ALREADY EXPIRED", rem: "" },
   { org: "Nishat Nursing Home", fn: "Javed", ln: "Aslam", mob: "7987080052", status: "Engaged", cat: "Not Yet Certified/Accredited", exp: "Not found", urg: "", rem: "Did not respond" },
   { org: "om hospital and research center", fn: "ANKUR", ln: "mishra", mob: "9669198778", status: "Engaged", cat: "Certified", exp: "10-06-2026", urg: "ALREADY EXPIRED", rem: "Did not respond" },
   { org: "Om hospital and research centre bhopal", fn: "Kapil", ln: "Kurmi", mob: "9753924122", status: "Existing", cat: "Certified", exp: "10-06-2026", urg: "ALREADY EXPIRED", rem: "" },
@@ -181,7 +181,7 @@ const RAW_DATA: RawRow[] = [
   { org: "Sai shraddha Hospital", fn: "Dr Rk patel", ln: "patel", mob: "9425007769", status: "Warm", cat: "Certified", exp: "14-09-2024", urg: "ALREADY EXPIRED", rem: "Plans to apply after 5-6 month, but has issue why he should pay Annual fees every year. What is the benefit to him after paying 2 lakh every year." },
   { org: "Sakshi hospital", fn: "Yogesh", ln: "Shrivastava", mob: "9893368702", status: "Cold", cat: "Not Yet Certified/Accredited", exp: "Not found", urg: "", rem: "Disconected the call the moment he heard NABH, said we don't have any plans and disconnected" },
   { org: "Samarpan oncology and multispeciality hospital", fn: "Sohail", ln: "Khan", mob: "8305886453", status: "Engaged", cat: "Certified", exp: "23-06-2027", urg: "Expiring 181-365 days", rem: "Did not respond" },
-  { org: "Samriddhi hospital", fn: "Kamlesh", ln: "Sahu azad", mob: "9893686162", status: "Application in progress", cat: "Certified", exp: "13-10-2027", urg: "Expiring > 1 year", rem: "" },
+  { org: "Samriddhi hospital", fn: "Kamlesh", ln: "Sahu azad", mob: "9893686162", status: "Won", cat: "Accredited", exp: "13-10-2030", urg: "Expiring > 1 year", rem: "" },
   { org: "SANT CITY HOSPITAL", fn: "Shyam", ln: "Mewada", mob: "8720835437", status: "Cold", cat: "Certified", exp: "09-12-2026", urg: "Expiring 91-180 days", rem: "They are a very small setup. Have no plans to apply for accreditation currently. ELC will get expired in 2028 then will plan for accreditation." },
   { org: "Sant Hirdaram hospital", fn: "Dinesh", ln: "Yadav", mob: "7828330758", status: "Existing", cat: "Certified", exp: "26-01-2029", urg: "", rem: "" },
   { org: "Sarthak Hospital", fn: "jitendra", ln: "singh", mob: "7017952650", status: "Cold", cat: "Not Yet Certified/Accredited", exp: "Not found", urg: "", rem: "Currently they are into a rented building, their own hospital is under construction, once it is done they will apply for ELC first." },
@@ -280,10 +280,10 @@ export const INITIAL_HOSPITALS: Hospital[] = RAW_DATA.map((row, idx) => {
                orgLower.includes('bairagarh') ? 'Bhopal' : 'Bhopal';
   const state = 'Madhya Pradesh';
 
-  // Seed sample yatra event attendance for lifecycle tracking
-  const hasAttendedYatra = idx % 2 === 0 || normStatus === 'Won' || normStatus === 'Application in progress';
-  const yatraDate = hasAttendedYatra ? `2026-0${(idx % 4) + 4}-15` : undefined;
-  const yatraName = hasAttendedYatra ? `Aarogya Yatra ${city} Healthcare Summit 2026` : undefined;
+  // Default yatra attendance is false until assigned or attended
+  const hasAttendedYatra = false;
+  const yatraDate = undefined;
+  const yatraName = undefined;
 
   const convertedDate = normStatus === 'Won' ? '2026-07-28' : undefined;
 
@@ -302,7 +302,7 @@ export const INITIAL_HOSPITALS: Hospital[] = RAW_DATA.map((row, idx) => {
     yatraEventAttended: hasAttendedYatra,
     yatraEventDate: yatraDate,
     yatraEventName: yatraName,
-    yatraCity: city,
+    yatraCity: undefined,
     enrolledCohortIds: [], // No training added till now for anyone as requested
     convertedDate: convertedDate,
     remarks: row.rem ? [
@@ -323,67 +323,6 @@ export const INITIAL_HOSPITALS: Hospital[] = RAW_DATA.map((row, idx) => {
 
 export const INITIAL_COHORTS: TrainingCohort[] = [];
 
-export const INITIAL_YATRAS: YatraEvent[] = [
-  {
-    id: 'yatra-bhopal-2026',
-    title: 'Aarogya Yatra Bhopal Healthcare Summit',
-    city: 'Bhopal',
-    state: 'Madhya Pradesh',
-    date: '2026-06-15',
-    venue: 'Bhopal Quality Hall & Medical Chamber',
-    hospitalIds: [
-      'hosp-sheet-1',
-      'hosp-sheet-3',
-      'hosp-sheet-4',
-      'hosp-sheet-7',
-      'hosp-sheet-11',
-      'hosp-sheet-13',
-      'hosp-sheet-19',
-      'hosp-sheet-20',
-      'hosp-sheet-26',
-      'hosp-sheet-30'
-    ]
-  },
-  {
-    id: 'yatra-indore-2026',
-    title: 'Aarogya Yatra Indore Quality Convention',
-    city: 'Indore',
-    state: 'Madhya Pradesh',
-    date: '2026-05-20',
-    venue: 'Indore Medical Association Auditorium',
-    hospitalIds: [
-      'hosp-sheet-2',
-      'hosp-sheet-5',
-      'hosp-sheet-8',
-      'hosp-sheet-14',
-      'hosp-sheet-21'
-    ]
-  },
-  {
-    id: 'yatra-jabalpur-2026',
-    title: 'Aarogya Yatra Jabalpur Regional Summit',
-    city: 'Jabalpur',
-    state: 'Madhya Pradesh',
-    date: '2026-07-10',
-    venue: 'Jabalpur Civic & Healthcare Center',
-    hospitalIds: [
-      'hosp-sheet-6',
-      'hosp-sheet-10',
-      'hosp-sheet-15'
-    ]
-  },
-  {
-    id: 'yatra-gwalior-2026',
-    title: 'Aarogya Yatra Gwalior Conclave',
-    city: 'Gwalior',
-    state: 'Madhya Pradesh',
-    date: '2026-04-18',
-    venue: 'Gwalior Chamber of Commerce & Healthcare',
-    hospitalIds: [
-      'hosp-sheet-9',
-      'hosp-sheet-12',
-      'hosp-sheet-18'
-    ]
-  }
-];
+export const INITIAL_YATRAS: YatraEvent[] = [];
+
 

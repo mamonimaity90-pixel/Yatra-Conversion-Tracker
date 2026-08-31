@@ -686,7 +686,7 @@ export default function App() {
   };
 
   // Yatra Event Handlers
-  const handleCreateYatra = (newYatraData: Omit<YatraEvent, 'id'>) => {
+  const handleCreateYatra = async (newYatraData: Omit<YatraEvent, 'id'>) => {
     const newYatra: YatraEvent = {
       ...newYatraData,
       id: `yatra-${Date.now()}`
@@ -694,11 +694,18 @@ export default function App() {
 
     const nextYatras = [newYatra, ...yatras];
     setYatras(nextYatras);
+    try {
+      await fetch('/api/tracker/yatras', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newYatra)
+      });
+    } catch {}
     syncFullStateToServer(hospitals, cohorts, states, nextYatras);
     addToast('success', 'Yatra Event Added', `Scheduled "${newYatra.title}" in ${newYatra.city}.`);
   };
 
-  const handleEditYatra = (updatedYatra: YatraEvent) => {
+  const handleEditYatra = async (updatedYatra: YatraEvent) => {
     const nextYatras = yatras.map((y) => (y.id === updatedYatra.id ? updatedYatra : y));
     setYatras(nextYatras);
 
@@ -716,11 +723,18 @@ export default function App() {
     });
 
     setHospitals(nextHospitals);
+    try {
+      await fetch(`/api/tracker/yatras/${updatedYatra.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedYatra)
+      });
+    } catch {}
     syncFullStateToServer(nextHospitals, cohorts, states, nextYatras);
     addToast('success', 'Yatra Event Updated', `Updated details for "${updatedYatra.title}".`);
   };
 
-  const handleDeleteYatra = (yatraId: string) => {
+  const handleDeleteYatra = async (yatraId: string) => {
     const targetYatra = yatras.find((y) => y.id === yatraId);
     const nextYatras = yatras.filter((y) => y.id !== yatraId);
     setYatras(nextYatras);
@@ -743,11 +757,17 @@ export default function App() {
       setHospitals(nextHospitals);
     }
 
+    try {
+      await fetch(`/api/tracker/yatras/${yatraId}`, {
+        method: 'DELETE'
+      });
+    } catch {}
+
     syncFullStateToServer(nextHospitals, cohorts, states, nextYatras);
     addToast('info', 'Yatra Deleted', `Removed "${targetYatra?.title || 'Yatra Event'}".`);
   };
 
-  const handleAssignHospitalsToYatra = (yatraId: string, hospitalIds: string[]) => {
+  const handleAssignHospitalsToYatra = async (yatraId: string, hospitalIds: string[]) => {
     const targetYatra = yatras.find((y) => y.id === yatraId);
     if (!targetYatra) return;
 
@@ -777,8 +797,16 @@ export default function App() {
     });
     setHospitals(nextHospitals);
 
+    try {
+      await fetch(`/api/tracker/yatras/${yatraId}/assign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hospitalIds })
+      });
+    } catch {}
+
     syncFullStateToServer(nextHospitals, cohorts, states, nextYatras);
-    addToast('success', 'Hospitals Mapped to Yatra', `Mapped ${hospitalIds.length} hospital(s) to ${targetYatra.city} Yatra.`);
+    addToast('success', 'Hospitals Mapped', `Mapped ${hospitalIds.length} hospital(s) to "${targetYatra.title}".`);
   };
 
   const handleRemoveHospitalFromYatra = (yatraId: string, hospitalId: string) => {
