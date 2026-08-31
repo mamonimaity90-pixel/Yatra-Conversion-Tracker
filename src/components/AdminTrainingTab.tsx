@@ -23,15 +23,25 @@ import {
   Globe,
   Compass,
   Check,
-  AlertCircle
+  AlertCircle,
+  Phone,
+  MessageCircle,
+  X,
+  UserPlus
 } from 'lucide-react';
-import { TrainingCohort, Hospital, CallStatus, CohortAttendee, StateLocation } from '../types';
-import { formatDate, getStatusBadgeClass, getCategoryBadgeClass, calculateTrainingEfficacy } from '../utils/helpers';
+import { TrainingCohort, Hospital, CallStatus, CohortAttendee, StateLocation, YatraEvent } from '../types';
+import { 
+  formatDate, 
+  getStatusBadgeClass, 
+  getCategoryBadgeClass, 
+  getWhatsAppLink 
+} from '../utils/helpers';
 
-interface AdminTrainingTabProps {
+export interface AdminTrainingTabProps {
   cohorts: TrainingCohort[];
   hospitals: Hospital[];
   states: StateLocation[];
+  yatras: YatraEvent[];
   onCreateCohort: (newCohort: Omit<TrainingCohort, 'id' | 'enrolledHospitalIds' | 'attendees'>) => void;
   onEditCohort: (updatedCohort: TrainingCohort) => void;
   onDeleteCohort: (cohortId: string) => void;
@@ -42,11 +52,15 @@ interface AdminTrainingTabProps {
     attendanceStatus: CohortAttendee['attendanceStatus'], 
     postTrainingStatus: CallStatus
   ) => void;
+  onCreateYatra: (newYatra: Omit<YatraEvent, 'id'>) => void;
+  onEditYatra: (updatedYatra: YatraEvent) => void;
+  onDeleteYatra: (yatraId: string) => void;
+  onAssignHospitalsToYatra: (yatraId: string, hospitalIds: string[]) => void;
+  onRemoveHospitalFromYatra: (yatraId: string, hospitalId: string) => void;
   onAddState: (stateName: string, initialCities?: string[]) => void;
   onDeleteState: (stateId: string) => void;
   onAddCity: (stateId: string, cityName: string) => void;
   onDeleteCity: (stateId: string, cityName: string) => void;
-  onUpdateHospitalYatra: (hospitalId: string, attended: boolean, eventName?: string, eventDate?: string) => void;
   onSelectHospital: (hospital: Hospital) => void;
 }
 
@@ -54,135 +68,312 @@ export const AdminTrainingTab: React.FC<AdminTrainingTabProps> = ({
   cohorts,
   hospitals,
   states,
+  yatras,
   onCreateCohort,
   onEditCohort,
   onDeleteCohort,
   onEnrollHospitals,
   onUpdateAttendeeStatus,
+  onCreateYatra,
+  onEditYatra,
+  onDeleteYatra,
+  onAssignHospitalsToYatra,
+  onRemoveHospitalFromYatra,
   onAddState,
   onDeleteState,
   onAddCity,
   onDeleteCity,
-  onUpdateHospitalYatra,
   onSelectHospital,
 }) => {
-  const [adminSection, setAdminSection] = useState<'trainings' | 'locations' | 'yatra_lifecycle'>('trainings');
-  const [selectedCohortId, setSelectedCohortId] = useState<string>(cohorts[0]?.id || '');
+  const [adminSection, setAdminSection] = useState<'yatras' | 'trainings' | 'locations'>('yatras');
   
-  // Modals state
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
+  // Cohort state
+  const [selectedCohortId, setSelectedCohortId] = useState<string>(cohorts[0]?.id || '');
+  const [showCreateCohortModal, setShowCreateCohortModal] = useState(false);
+  const [showEditCohortModal, setShowEditCohortModal] = useState(false);
   const [editingCohort, setEditingCohort] = useState<TrainingCohort | null>(null);
-  const [showAssignerModal, setShowAssignerModal] = useState(false);
+  const [showAssignerCohortModal, setShowAssignerCohortModal] = useState(false);
   const [cohortToDelete, setCohortToDelete] = useState<TrainingCohort | null>(null);
 
-  // States & Cities management state
+  // Cohort Form State
+  const [cohortFormTitle, setCohortFormTitle] = useState('');
+  const [cohortFormCategory, setCohortFormCategory] = useState('Certified & Entry Level Hospitals');
+  const [cohortFormDate, setCohortFormDate] = useState('');
+  const [cohortFormTime, setCohortFormTime] = useState('10:00 AM - 01:30 PM');
+  const [cohortFormState, setCohortFormState] = useState('Madhya Pradesh');
+  const [cohortFormCity, setCohortFormCity] = useState('Bhopal');
+  const [cohortFormVenue, setCohortFormVenue] = useState('');
+  const [cohortFormMode, setCohortFormMode] = useState<'In-Person' | 'Hybrid' | 'Virtual'>('In-Person');
+  const [cohortFormCapacity, setCohortFormCapacity] = useState<number>(35);
+  const [cohortFormTrainer, setCohortFormTrainer] = useState('');
+  const [cohortFormStatus, setCohortFormStatus] = useState<'Upcoming' | 'In Progress' | 'Completed' | 'Cancelled'>('Upcoming');
+
+  // Cohort Candidate Enrollment Filters
+  const [assignerCategory, setAssignerCategory] = useState('ALL');
+  const [assignerStatus, setAssignerStatus] = useState('ALL');
+  const [assignerSearch, setAssignerSearch] = useState('');
+  const [selectedForCohortEnrollment, setSelectedForCohortEnrollment] = useState<string[]>([]);
+
+  // ==================== YATRA STATE ====================
+  const [selectedYatraId, setSelectedYatraId] = useState<string>(yatras[0]?.id || '');
+  const [showCreateYatraModal, setShowCreateYatraModal] = useState(false);
+  const [showEditYatraModal, setShowEditYatraModal] = useState(false);
+  const [editingYatra, setEditingYatra] = useState<YatraEvent | null>(null);
+  const [showYatraHospitalMapperModal, setShowYatraHospitalMapperModal] = useState(false);
+  const [yatraToDelete, setYatraToDelete] = useState<YatraEvent | null>(null);
+
+  // Yatra Form State
+  const [yatraFormDate, setYatraFormDate] = useState(new Date().toISOString().split('T')[0]);
+  const [yatraFormCity, setYatraFormCity] = useState('Bhopal');
+  const [yatraFormState, setYatraFormState] = useState('Madhya Pradesh');
+  const [yatraFormTitle, setYatraFormTitle] = useState('');
+  const [yatraFormVenue, setYatraFormVenue] = useState('');
+
+  // Yatra Hospital Multi-Mapping Filters
+  const [yatraMapperSearch, setYatraMapperSearch] = useState('');
+  const [yatraMapperStatus, setYatraMapperStatus] = useState('ALL');
+  const [yatraMapperCategory, setYatraMapperCategory] = useState('ALL');
+  const [yatraMapperCity, setYatraMapperCity] = useState('ALL');
+  const [selectedHospitalsForYatra, setSelectedHospitalsForYatra] = useState<string[]>([]);
+  const [mappedHospitalSearch, setMappedHospitalSearch] = useState('');
+
+  // ==================== STATES & CITIES STATE ====================
   const [newStateName, setNewStateName] = useState('');
   const [selectedStateForCity, setSelectedStateForCity] = useState<string>(states[0]?.id || '');
   const [newCityName, setNewCityName] = useState('');
 
-  // Hospital Yatra Quick Logger filter
-  const [yatraSearch, setYatraSearch] = useState('');
-  const [yatraStatusFilter, setYatraStatusFilter] = useState<'ALL' | 'ATTENDED' | 'NOT_ATTENDED'>('ALL');
-
-  // Filter for candidate hospital assigner
-  const [assignerCategory, setAssignerCategory] = useState('ALL');
-  const [assignerStatus, setAssignerStatus] = useState('ALL');
-  const [assignerSearch, setAssignerSearch] = useState('');
-  const [selectedForEnrollment, setSelectedForEnrollment] = useState<string[]>([]);
-
-  // Create/Edit Cohort Form State
-  const [formTitle, setFormTitle] = useState('');
-  const [formCategory, setFormCategory] = useState('Certified & Entry Level Hospitals');
-  const [formDate, setFormDate] = useState('');
-  const [formTime, setFormTime] = useState('10:00 AM - 01:30 PM');
-  const [formState, setFormState] = useState('Madhya Pradesh');
-  const [formCity, setFormCity] = useState('Bhopal');
-  const [formVenue, setFormVenue] = useState('');
-  const [formMode, setFormMode] = useState<'In-Person' | 'Hybrid' | 'Virtual'>('In-Person');
-  const [formCapacity, setFormCapacity] = useState<number>(35);
-  const [formTrainer, setFormTrainer] = useState('');
-  const [formStatus, setFormStatus] = useState<'Upcoming' | 'In Progress' | 'Completed' | 'Cancelled'>('Upcoming');
-
+  // Active Cohort & Active Yatra objects
   const activeCohort = cohorts.find((c) => c.id === selectedCohortId) || cohorts[0];
+  const activeYatra = yatras.find((y) => y.id === selectedYatraId) || yatras[0];
 
-  const handleOpenCreate = () => {
-    setFormTitle('');
-    setFormCategory('Certified & Entry Level Hospitals');
-    setFormDate(new Date().toISOString().split('T')[0]);
-    setFormTime('10:00 AM - 02:00 PM');
-    setFormState(states[0]?.name || 'Madhya Pradesh');
-    setFormCity(states[0]?.cities[0] || 'Bhopal');
-    setFormVenue('');
-    setFormMode('In-Person');
-    setFormCapacity(35);
-    setFormTrainer('');
-    setFormStatus('Upcoming');
-    setShowCreateModal(true);
+  const callStatuses: CallStatus[] = [
+    'Hot',
+    'Warm',
+    'Application in progress',
+    'Engaged',
+    'Existing',
+    'Won',
+    'Cold',
+    'Lost'
+  ];
+
+  // ==================== YATRA HANDLERS ====================
+  const handleOpenCreateYatra = () => {
+    const defaultCity = states[0]?.cities[0] || 'Bhopal';
+    const defaultState = states[0]?.name || 'Madhya Pradesh';
+    const today = new Date().toISOString().split('T')[0];
+    
+    setYatraFormDate(today);
+    setYatraFormCity(defaultCity);
+    setYatraFormState(defaultState);
+    setYatraFormTitle(`Aarogya Yatra ${defaultCity} Healthcare Summit`);
+    setYatraFormVenue(`${defaultCity} Quality Hall & Medical Chamber`);
+    setShowCreateYatraModal(true);
   };
 
-  const handleOpenEdit = (cohort: TrainingCohort, e?: React.MouseEvent) => {
+  const handleOpenEditYatra = (yatra: YatraEvent, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    setEditingCohort(cohort);
-    setFormTitle(cohort.title);
-    setFormCategory(cohort.targetCategory);
-    setFormDate(cohort.date);
-    setFormTime(cohort.time);
-    setFormState(cohort.state || 'Madhya Pradesh');
-    setFormCity(cohort.city);
-    setFormVenue(cohort.venue);
-    setFormMode(cohort.mode);
-    setFormCapacity(cohort.capacity);
-    setFormTrainer(cohort.trainerName);
-    setFormStatus(cohort.status);
-    setShowEditModal(true);
+    setEditingYatra(yatra);
+    setYatraFormDate(yatra.date);
+    setYatraFormCity(yatra.city);
+    setYatraFormState(yatra.state || 'Madhya Pradesh');
+    setYatraFormTitle(yatra.title);
+    setYatraFormVenue(yatra.venue || '');
+    setShowEditYatraModal(true);
   };
 
-  const handleCreateSubmit = (e: React.FormEvent) => {
+  const handleCreateYatraSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formTitle.trim() || !formDate) return;
+    if (!yatraFormCity.trim() || !yatraFormDate) return;
 
-    onCreateCohort({
-      title: formTitle.trim(),
-      targetCategory: formCategory,
-      date: formDate,
-      time: formTime,
-      state: formState,
-      city: formCity || 'Bhopal',
-      venue: formVenue.trim() || `${formCity} Quality Hall & Medical Chambers`,
-      mode: formMode,
-      capacity: Number(formCapacity) || 30,
-      trainerName: formTrainer.trim() || 'Dr. Amitabh Sen (Lead Assessor)',
-      status: formStatus
+    const title = yatraFormTitle.trim() || `Aarogya Yatra ${yatraFormCity.trim()} Summit`;
+    const venue = yatraFormVenue.trim() || `${yatraFormCity.trim()} Medical Centre`;
+
+    onCreateYatra({
+      title,
+      city: yatraFormCity.trim(),
+      state: yatraFormState,
+      date: yatraFormDate,
+      venue,
+      hospitalIds: []
     });
 
-    setShowCreateModal(false);
+    setShowCreateYatraModal(false);
   };
 
-  const handleEditSubmit = (e: React.FormEvent) => {
+  const handleEditYatraSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingCohort || !formTitle.trim()) return;
+    if (!editingYatra || !yatraFormCity.trim() || !yatraFormDate) return;
+
+    onEditYatra({
+      ...editingYatra,
+      title: yatraFormTitle.trim() || editingYatra.title,
+      city: yatraFormCity.trim(),
+      state: yatraFormState,
+      date: yatraFormDate,
+      venue: yatraFormVenue.trim() || editingYatra.venue,
+    });
+
+    setShowEditYatraModal(false);
+    setEditingYatra(null);
+  };
+
+  const handleDeleteYatraConfirm = () => {
+    if (!yatraToDelete) return;
+    onDeleteYatra(yatraToDelete.id);
+    if (selectedYatraId === yatraToDelete.id) {
+      const remaining = yatras.filter((y) => y.id !== yatraToDelete.id);
+      setSelectedYatraId(remaining[0]?.id || '');
+    }
+    setYatraToDelete(null);
+  };
+
+  const handleOpenYatraMapperModal = () => {
+    setSelectedHospitalsForYatra([]);
+    setYatraMapperSearch('');
+    setYatraMapperStatus('ALL');
+    setYatraMapperCategory('ALL');
+    setYatraMapperCity('ALL');
+    setShowYatraHospitalMapperModal(true);
+  };
+
+  const handleConfirmYatraHospitalMapping = () => {
+    if (!activeYatra || selectedHospitalsForYatra.length === 0) return;
+    onAssignHospitalsToYatra(activeYatra.id, selectedHospitalsForYatra);
+    setSelectedHospitalsForYatra([]);
+    setShowYatraHospitalMapperModal(false);
+  };
+
+  // Filter candidates for Yatra Mapper
+  const candidateHospitalsForYatra = hospitals.filter((h) => {
+    const isAlreadyMapped = activeYatra?.hospitalIds?.includes(h.id);
+    if (isAlreadyMapped) return false;
+
+    if (yatraMapperStatus !== 'ALL' && h.callStatus !== yatraMapperStatus) return false;
+    if (yatraMapperCategory !== 'ALL' && h.accreditationCategory !== yatraMapperCategory) return false;
+    if (yatraMapperCity !== 'ALL' && h.city !== yatraMapperCity) return false;
+
+    if (yatraMapperSearch.trim()) {
+      const q = yatraMapperSearch.toLowerCase().trim();
+      const matchName = (h.organisation || '').toLowerCase().includes(q);
+      const matchFirst = (h.firstName || '').toLowerCase().includes(q);
+      const matchLast = (h.lastName || '').toLowerCase().includes(q);
+      const matchMobile = (h.mobile || '').includes(q);
+      const matchCity = (h.city || '').toLowerCase().includes(q);
+      if (!matchName && !matchFirst && !matchLast && !matchMobile && !matchCity) return false;
+    }
+    return true;
+  });
+
+  const toggleSelectHospitalForYatra = (id: string) => {
+    if (selectedHospitalsForYatra.includes(id)) {
+      setSelectedHospitalsForYatra(selectedHospitalsForYatra.filter((hId) => hId !== id));
+    } else {
+      setSelectedHospitalsForYatra([...selectedHospitalsForYatra, id]);
+    }
+  };
+
+  const selectAllYatraCandidates = () => {
+    const ids = candidateHospitalsForYatra.map((h) => h.id);
+    setSelectedHospitalsForYatra(ids);
+  };
+
+  const clearYatraCandidatesSelection = () => {
+    setSelectedHospitalsForYatra([]);
+  };
+
+  // Mapped hospitals under current active Yatra
+  const mappedHospitals = hospitals.filter((h) => activeYatra?.hospitalIds?.includes(h.id));
+  const filteredMappedHospitals = mappedHospitals.filter((h) => {
+    if (!mappedHospitalSearch.trim()) return true;
+    const q = mappedHospitalSearch.toLowerCase().trim();
+    return (
+      (h.organisation || '').toLowerCase().includes(q) ||
+      (h.firstName || '').toLowerCase().includes(q) ||
+      (h.lastName || '').toLowerCase().includes(q) ||
+      (h.mobile || '').includes(q) ||
+      (h.callStatus || '').toLowerCase().includes(q)
+    );
+  });
+
+  // ==================== COHORT HANDLERS ====================
+  const handleOpenCreateCohort = () => {
+    setCohortFormTitle('');
+    setCohortFormCategory('Certified & Entry Level Hospitals');
+    setCohortFormDate(new Date().toISOString().split('T')[0]);
+    setCohortFormTime('10:00 AM - 02:00 PM');
+    setCohortFormState(states[0]?.name || 'Madhya Pradesh');
+    setCohortFormCity(states[0]?.cities[0] || 'Bhopal');
+    setCohortFormVenue('');
+    setCohortFormMode('In-Person');
+    setCohortFormCapacity(35);
+    setCohortFormTrainer('');
+    setCohortFormStatus('Upcoming');
+    setShowCreateCohortModal(true);
+  };
+
+  const handleOpenEditCohort = (cohort: TrainingCohort, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setEditingCohort(cohort);
+    setCohortFormTitle(cohort.title);
+    setCohortFormCategory(cohort.targetCategory);
+    setCohortFormDate(cohort.date);
+    setCohortFormTime(cohort.time);
+    setCohortFormState(cohort.state || 'Madhya Pradesh');
+    setCohortFormCity(cohort.city);
+    setCohortFormVenue(cohort.venue);
+    setCohortFormMode(cohort.mode);
+    setCohortFormCapacity(cohort.capacity);
+    setCohortFormTrainer(cohort.trainerName);
+    setCohortFormStatus(cohort.status);
+    setShowEditCohortModal(true);
+  };
+
+  const handleCreateCohortSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!cohortFormTitle.trim() || !cohortFormDate) return;
+
+    onCreateCohort({
+      title: cohortFormTitle.trim(),
+      targetCategory: cohortFormCategory,
+      date: cohortFormDate,
+      time: cohortFormTime,
+      state: cohortFormState,
+      city: cohortFormCity || 'Bhopal',
+      venue: cohortFormVenue.trim() || `${cohortFormCity} Quality Hall & Medical Chambers`,
+      mode: cohortFormMode,
+      capacity: Number(cohortFormCapacity) || 30,
+      trainerName: cohortFormTrainer.trim() || 'Dr. Amitabh Sen (Lead Assessor)',
+      status: cohortFormStatus
+    });
+
+    setShowCreateCohortModal(false);
+  };
+
+  const handleEditCohortSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCohort || !cohortFormTitle.trim()) return;
 
     onEditCohort({
       ...editingCohort,
-      title: formTitle.trim(),
-      targetCategory: formCategory,
-      date: formDate,
-      time: formTime,
-      state: formState,
-      city: formCity,
-      venue: formVenue.trim() || editingCohort.venue,
-      mode: formMode,
-      capacity: Number(formCapacity) || editingCohort.capacity,
-      trainerName: formTrainer.trim() || editingCohort.trainerName,
-      status: formStatus
+      title: cohortFormTitle.trim(),
+      targetCategory: cohortFormCategory,
+      date: cohortFormDate,
+      time: cohortFormTime,
+      state: cohortFormState,
+      city: cohortFormCity,
+      venue: cohortFormVenue.trim() || editingCohort.venue,
+      mode: cohortFormMode,
+      capacity: Number(cohortFormCapacity) || editingCohort.capacity,
+      trainerName: cohortFormTrainer.trim() || editingCohort.trainerName,
+      status: cohortFormStatus
     });
 
-    setShowEditModal(false);
+    setShowEditCohortModal(false);
     setEditingCohort(null);
   };
 
-  const handleDeleteConfirm = () => {
+  const handleDeleteCohortConfirm = () => {
     if (!cohortToDelete) return;
     onDeleteCohort(cohortToDelete.id);
     if (selectedCohortId === cohortToDelete.id) {
@@ -192,11 +383,36 @@ export const AdminTrainingTab: React.FC<AdminTrainingTabProps> = ({
     setCohortToDelete(null);
   };
 
-  const handleConfirmEnrollment = () => {
-    if (!activeCohort || selectedForEnrollment.length === 0) return;
-    onEnrollHospitals(activeCohort.id, selectedForEnrollment);
-    setSelectedForEnrollment([]);
-    setShowAssignerModal(false);
+  const handleConfirmCohortEnrollment = () => {
+    if (!activeCohort || selectedForCohortEnrollment.length === 0) return;
+    onEnrollHospitals(activeCohort.id, selectedForCohortEnrollment);
+    setSelectedForCohortEnrollment([]);
+    setShowAssignerCohortModal(false);
+  };
+
+  const candidateHospitalsForCohort = hospitals.filter((h) => {
+    const isAlreadyEnrolled = activeCohort?.enrolledHospitalIds.includes(h.id);
+    if (isAlreadyEnrolled) return false;
+
+    if (assignerCategory !== 'ALL' && h.accreditationCategory !== assignerCategory) return false;
+    if (assignerStatus !== 'ALL' && h.callStatus !== assignerStatus) return false;
+    if (assignerSearch) {
+      const q = assignerSearch.toLowerCase();
+      const matchName = h.organisation.toLowerCase().includes(q);
+      const matchFirst = (h.firstName || '').toLowerCase().includes(q);
+      const matchLast = (h.lastName || '').toLowerCase().includes(q);
+      const matchMobile = (h.mobile || '').includes(q);
+      if (!matchName && !matchFirst && !matchLast && !matchMobile) return false;
+    }
+    return true;
+  });
+
+  const toggleSelectHospitalForCohort = (id: string) => {
+    if (selectedForCohortEnrollment.includes(id)) {
+      setSelectedForCohortEnrollment(selectedForCohortEnrollment.filter((hId) => hId !== id));
+    } else {
+      setSelectedForCohortEnrollment([...selectedForCohortEnrollment, id]);
+    }
   };
 
   // State & City management handlers
@@ -214,107 +430,70 @@ export const AdminTrainingTab: React.FC<AdminTrainingTabProps> = ({
     setNewCityName('');
   };
 
-  // Filter candidates for hospital assigner
-  const candidateHospitals = hospitals.filter((h) => {
-    const isAlreadyEnrolled = activeCohort?.enrolledHospitalIds.includes(h.id);
-    if (isAlreadyEnrolled) return false;
-
-    if (assignerCategory !== 'ALL' && h.accreditationCategory !== assignerCategory) return false;
-    if (assignerStatus !== 'ALL' && h.callStatus !== assignerStatus) return false;
-    if (assignerSearch) {
-      const q = assignerSearch.toLowerCase();
-      const matchName = h.organisation.toLowerCase().includes(q);
-      const matchFirst = (h.firstName || '').toLowerCase().includes(q);
-      const matchLast = (h.lastName || '').toLowerCase().includes(q);
-      const matchMobile = (h.mobile || '').includes(q);
-      if (!matchName && !matchFirst && !matchLast && !matchMobile) return false;
-    }
-    return true;
-  });
-
-  const toggleSelectHospital = (id: string) => {
-    if (selectedForEnrollment.includes(id)) {
-      setSelectedForEnrollment(selectedForEnrollment.filter((hId) => hId !== id));
-    } else {
-      setSelectedForEnrollment([...selectedForEnrollment, id]);
-    }
-  };
-
-  const selectAllCandidates = () => {
-    const ids = candidateHospitals.map((h) => h.id);
-    setSelectedForEnrollment(ids);
-  };
-
-  const clearSelection = () => {
-    setSelectedForEnrollment([]);
-  };
-
-  // Stats for active cohort
-  const totalEnrolled = activeCohort?.attendees?.length || 0;
-  const attendedCount = activeCohort?.attendees?.filter((a) => a.attendanceStatus === 'Attended').length || 0;
-  const convertedWonCount = activeCohort?.attendees?.filter((a) => a.postTrainingStatus === 'Won').length || 0;
-
-  const callStatuses: CallStatus[] = [
-    'Hot',
-    'Warm',
-    'Application in progress',
-    'Engaged',
-    'Existing',
-    'Won',
-    'Cold',
-    'Lost'
-  ];
-
-  // Filtered hospitals for Yatra Event Tracker section
-  const yatraFilteredHospitals = hospitals.filter((h) => {
-    if (yatraStatusFilter === 'ATTENDED' && !h.yatraEventAttended) return false;
-    if (yatraStatusFilter === 'NOT_ATTENDED' && h.yatraEventAttended) return false;
-    if (yatraSearch.trim()) {
-      const q = yatraSearch.toLowerCase();
-      const matchName = h.organisation.toLowerCase().includes(q);
-      const matchContact = `${h.firstName || ''} ${h.lastName || ''}`.toLowerCase().includes(q);
-      const matchCity = (h.city || '').toLowerCase().includes(q);
-      return matchName || matchContact || matchCity;
-    }
-    return true;
-  });
+  // All available cities list for selects
+  const allCities = Array.from(new Set(states.flatMap((s) => s.cities)));
 
   return (
     <div className="space-y-6">
       
-      {/* Top Banner & Sub-Section Navigation */}
+      {/* Top Banner & Section Navigation */}
       <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-xs font-semibold mb-2 border border-indigo-100">
-              <GraduationCap className="w-3.5 h-3.5" />
+              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
               <span>Operations & Administration Control Center</span>
             </div>
             <h2 className="text-lg font-bold text-slate-900 tracking-tight">
-              Training Cohorts, Geographies & Lifecycle Connections
+              Yatra Summits, Training Masterclasses & Geography Hubs
             </h2>
             <p className="text-xs text-slate-500 max-w-2xl mt-0.5">
-              Manage accreditation masterclasses, configure state & city geographies, and connect hospital lifecycle milestones from Yatra events to training and conversion.
+              Add and manage Yatra events, map multiple hospitals to Yatras, coordinate training cohorts, and configure operating states and cities.
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              id="btn-open-create-cohort"
-              onClick={handleOpenCreate}
-              className="flex items-center gap-2 px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-xs transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              <span>New Training Session</span>
-            </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            {adminSection === 'yatras' && (
+              <button
+                id="btn-open-create-yatra"
+                onClick={handleOpenCreateYatra}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold shadow-xs transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                <span>+ Add Yatra Event</span>
+              </button>
+            )}
+
+            {adminSection === 'trainings' && (
+              <button
+                id="btn-open-create-cohort"
+                onClick={handleOpenCreateCohort}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-xs transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                <span>+ New Training Session</span>
+              </button>
+            )}
           </div>
         </div>
 
         {/* Section Tabs */}
         <div className="flex items-center gap-2 mt-5 pt-4 border-t border-slate-100">
           <button
+            onClick={() => setAdminSection('yatras')}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+              adminSection === 'yatras'
+                ? 'bg-slate-900 text-white shadow-xs'
+                : 'text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+            <span>Yatra Events & Hospital Mappings ({yatras.length})</span>
+          </button>
+
+          <button
             onClick={() => setAdminSection('trainings')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
               adminSection === 'trainings'
                 ? 'bg-slate-900 text-white shadow-xs'
                 : 'text-slate-600 hover:bg-slate-100'
@@ -326,7 +505,7 @@ export const AdminTrainingTab: React.FC<AdminTrainingTabProps> = ({
 
           <button
             onClick={() => setAdminSection('locations')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
               adminSection === 'locations'
                 ? 'bg-slate-900 text-white shadow-xs'
                 : 'text-slate-600 hover:bg-slate-100'
@@ -335,22 +514,335 @@ export const AdminTrainingTab: React.FC<AdminTrainingTabProps> = ({
             <Globe className="w-3.5 h-3.5" />
             <span>States & Cities ({states.length} States)</span>
           </button>
-
-          <button
-            onClick={() => setAdminSection('yatra_lifecycle')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
-              adminSection === 'yatra_lifecycle'
-                ? 'bg-slate-900 text-white shadow-xs'
-                : 'text-slate-600 hover:bg-slate-100'
-            }`}
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Yatra & Lifecycle Manager</span>
-          </button>
         </div>
       </div>
 
-      {/* SECTION 1: TRAINING COHORTS MANAGEMENT */}
+      {/* ========================================================================= */}
+      {/* SECTION 1: YATRA MANAGEMENT & HOSPITAL MAPPING (Primary User Request) */}
+      {/* ========================================================================= */}
+      {adminSection === 'yatras' && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+          
+          {/* Left: Yatra Events List (4 cols) */}
+          <div className="lg:col-span-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                <Sparkles className="w-4 h-4 text-amber-500" />
+                <span>Yatra Events ({yatras.length})</span>
+              </h3>
+              <button
+                onClick={handleOpenCreateYatra}
+                className="text-[11px] font-bold text-amber-700 hover:underline flex items-center gap-1"
+              >
+                <Plus className="w-3 h-3" />
+                <span>Add Event</span>
+              </button>
+            </div>
+
+            {yatras.length === 0 ? (
+              <div className="p-8 text-center bg-white rounded-xl border border-slate-200 text-slate-400 text-xs">
+                No Yatra events configured. Click "+ Add Yatra Event" to record a city summit.
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                {yatras.map((yatra) => {
+                  const isSelected = yatra.id === activeYatra?.id;
+                  const mappedCount = yatra.hospitalIds?.length || 0;
+
+                  return (
+                    <div
+                      key={yatra.id}
+                      onClick={() => setSelectedYatraId(yatra.id)}
+                      className={`p-3.5 rounded-xl border transition-all cursor-pointer relative group ${
+                        isSelected
+                          ? 'bg-slate-900 text-white border-slate-900 shadow-md'
+                          : 'bg-white text-slate-800 border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className={`text-[10px] font-bold px-2 py-0.2 rounded-full ${
+                              isSelected
+                                ? 'bg-amber-500 text-slate-950'
+                                : 'bg-amber-50 text-amber-800 border border-amber-200'
+                            }`}>
+                              📍 {yatra.city}
+                            </span>
+                            <span className={`text-[11px] font-mono ${isSelected ? 'text-slate-300' : 'text-slate-500'}`}>
+                              📅 {formatDate(yatra.date)}
+                            </span>
+                          </div>
+
+                          <h4 className="text-xs font-bold mt-1 line-clamp-1">
+                            {yatra.title}
+                          </h4>
+                        </div>
+                        
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            onClick={(e) => handleOpenEditYatra(yatra, e)}
+                            title="Edit Yatra Event"
+                            className={`p-1 rounded hover:bg-white/20 transition-colors ${
+                              isSelected ? 'text-slate-300 hover:text-white' : 'text-slate-400 hover:text-slate-700'
+                            }`}
+                          >
+                            <Edit2 className="w-3 h-3" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setYatraToDelete(yatra);
+                            }}
+                            title="Delete Yatra Event"
+                            className="p-1 rounded hover:bg-rose-500/20 text-rose-400 hover:text-rose-600 transition-colors"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {yatra.venue && (
+                        <p className={`text-[11px] mt-1.5 line-clamp-1 ${isSelected ? 'text-slate-300' : 'text-slate-500'}`}>
+                          🏢 {yatra.venue}
+                        </p>
+                      )}
+
+                      <div className={`mt-2.5 pt-2 border-t flex items-center justify-between text-[11px] ${
+                        isSelected ? 'border-slate-800 text-slate-400' : 'border-slate-100 text-slate-500'
+                      }`}>
+                        <span>Mapped Hospitals:</span>
+                        <strong className={`font-bold ${isSelected ? 'text-amber-400' : 'text-indigo-700'}`}>
+                          {mappedCount} Hospitals
+                        </strong>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Right: Active Yatra Details & Mapped Hospitals (8 cols) */}
+          {activeYatra ? (
+            <div className="lg:col-span-8 space-y-4">
+              
+              {/* Yatra Overview Card */}
+              <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <span className="text-[10px] font-bold text-amber-900 uppercase tracking-wider bg-amber-100 px-2 py-0.5 rounded border border-amber-200 flex items-center gap-1">
+                        <Sparkles className="w-3 h-3 text-amber-600" />
+                        <span>Aarogya Yatra Summit</span>
+                      </span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                        📍 {activeYatra.city}, {activeYatra.state || 'Madhya Pradesh'}
+                      </span>
+                      <span className="text-[10px] font-mono text-slate-600 bg-slate-100 px-2 py-0.5 rounded">
+                        📅 {formatDate(activeYatra.date)}
+                      </span>
+                    </div>
+
+                    <h3 className="text-base font-bold text-slate-900">
+                      {activeYatra.title}
+                    </h3>
+                    <div className="text-xs text-slate-500 mt-1">
+                      <span>Venue: <strong>{activeYatra.venue || `${activeYatra.city} Medical Chamber`}</strong></span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => handleOpenEditYatra(activeYatra)}
+                      className="flex items-center gap-1 px-3 py-2 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                      <span>Edit</span>
+                    </button>
+                    <button
+                      onClick={() => setYatraToDelete(activeYatra)}
+                      className="flex items-center gap-1 px-3 py-2 rounded-lg border border-rose-200 hover:bg-rose-50 text-rose-600 text-xs font-semibold transition-colors"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Delete</span>
+                    </button>
+                    <button
+                      id="btn-open-yatra-mapper-modal"
+                      onClick={handleOpenYatraMapperModal}
+                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-xs transition-colors"
+                    >
+                      <UserPlus className="w-4 h-4" />
+                      <span>+ Map Multiple Hospitals</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Quick stats banner */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                  <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-100">
+                    <span className="text-[10px] text-slate-500 uppercase block font-medium">Mapped Hospitals</span>
+                    <strong className="text-base font-bold text-slate-900">{mappedHospitals.length}</strong>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-orange-50/70 border border-orange-100">
+                    <span className="text-[10px] text-orange-700 uppercase block font-medium">Hot Leads</span>
+                    <strong className="text-base font-bold text-orange-800">
+                      {mappedHospitals.filter((h) => h.callStatus === 'Hot').length}
+                    </strong>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-blue-50/70 border border-blue-100">
+                    <span className="text-[10px] text-blue-700 uppercase block font-medium">Application in Progress</span>
+                    <strong className="text-base font-bold text-blue-800">
+                      {mappedHospitals.filter((h) => h.callStatus === 'Application in progress').length}
+                    </strong>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-emerald-50/70 border border-emerald-100">
+                    <span className="text-[10px] text-emerald-700 uppercase block font-medium">Converted (Won)</span>
+                    <strong className="text-base font-bold text-emerald-800">
+                      {mappedHospitals.filter((h) => h.callStatus === 'Won').length}
+                    </strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* Mapped Hospitals Table */}
+              <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+                <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                      <span>Hospitals Mapped to this Yatra ({filteredMappedHospitals.length})</span>
+                    </h4>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      These hospitals attended the {activeYatra.city} Yatra on {formatDate(activeYatra.date)}. In the pipeline, their Yatra column displays this city and date.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={mappedHospitalSearch}
+                        onChange={(e) => setMappedHospitalSearch(e.target.value)}
+                        placeholder="Filter mapped hospitals..."
+                        className="p-1.5 px-2.5 pl-7 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 w-48"
+                      />
+                      <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2 top-2" />
+                    </div>
+
+                    <button
+                      onClick={handleOpenYatraMapperModal}
+                      className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 rounded-lg text-xs font-bold transition-colors whitespace-nowrap"
+                    >
+                      + Add More Hospitals
+                    </button>
+                  </div>
+                </div>
+
+                {filteredMappedHospitals.length === 0 ? (
+                  <div className="p-10 text-center text-slate-400 text-xs">
+                    <Building2 className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                    <p className="font-semibold text-slate-600">No hospitals mapped to this Yatra yet</p>
+                    <p className="text-slate-400 text-[11px] mt-1 max-w-sm mx-auto">
+                      Click "+ Map Multiple Hospitals" to add multiple hospitals under this Yatra event at once.
+                    </p>
+                    <button
+                      onClick={handleOpenYatraMapperModal}
+                      className="mt-3 px-3.5 py-1.5 bg-amber-600 text-white rounded-lg text-xs font-semibold hover:bg-amber-700 shadow-2xs"
+                    >
+                      + Map Hospitals Now
+                    </button>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50/80 border-b border-slate-200 text-[10px] uppercase font-bold text-slate-500">
+                          <th className="py-2.5 px-4">Hospital Name & City</th>
+                          <th className="py-2.5 px-4">Contact Person</th>
+                          <th className="py-2.5 px-4">Call Status</th>
+                          <th className="py-2.5 px-4">Category</th>
+                          <th className="py-2.5 px-4 text-right">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-xs">
+                        {filteredMappedHospitals.map((hospital) => {
+                          const fullName = [hospital.firstName, hospital.lastName].filter(Boolean).join(' ') || '—';
+                          const whatsappUrl = hospital.mobile ? getWhatsAppLink(hospital.mobile, hospital.organisation, fullName) : '';
+
+                          return (
+                            <tr key={hospital.id} className="hover:bg-slate-50/80 transition-colors group">
+                              <td className="py-3 px-4">
+                                <button
+                                  onClick={() => onSelectHospital(hospital)}
+                                  className="font-semibold text-slate-900 hover:text-blue-600 text-left line-clamp-1"
+                                >
+                                  {hospital.organisation}
+                                </button>
+                                <div className="text-[10px] text-slate-400 mt-0.5">
+                                  📍 {hospital.city || activeYatra.city}, {hospital.state || 'Madhya Pradesh'}
+                                </div>
+                              </td>
+
+                              <td className="py-3 px-4">
+                                <div className="font-medium text-slate-800">{fullName}</div>
+                                {hospital.mobile && (
+                                  <div className="flex items-center gap-1.5 text-[10px] text-slate-500 font-mono mt-0.5">
+                                    <a href={`tel:${hospital.mobile}`} className="hover:text-blue-600">
+                                      {hospital.mobile}
+                                    </a>
+                                    <a
+                                      href={whatsappUrl}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="text-emerald-600 hover:text-emerald-700"
+                                      title="WhatsApp"
+                                    >
+                                      <MessageCircle className="w-3 h-3 inline" />
+                                    </a>
+                                  </div>
+                                )}
+                              </td>
+
+                              <td className="py-3 px-4">
+                                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${getStatusBadgeClass(hospital.callStatus)}`}>
+                                  {hospital.callStatus}
+                                </span>
+                              </td>
+
+                              <td className="py-3 px-4">
+                                <span className={`px-2 py-0.5 rounded text-[10px] ${getCategoryBadgeClass(hospital.accreditationCategory)}`}>
+                                  {hospital.accreditationCategory}
+                                </span>
+                              </td>
+
+                              <td className="py-3 px-4 text-right">
+                                <button
+                                  onClick={() => onRemoveHospitalFromYatra(activeYatra.id, hospital.id)}
+                                  className="px-2.5 py-1 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded text-[11px] font-medium transition-colors inline-flex items-center gap-1"
+                                  title="Remove from this Yatra"
+                                >
+                                  <X className="w-3 h-3" />
+                                  <span>Unmap</span>
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+            </div>
+          ) : null}
+
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* SECTION 2: TRAINING COHORTS MANAGEMENT */}
+      {/* ========================================================================= */}
       {adminSection === 'trainings' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
           
@@ -361,18 +853,23 @@ export const AdminTrainingTab: React.FC<AdminTrainingTabProps> = ({
                 <Layers className="w-4 h-4 text-indigo-600" />
                 <span>All Cohorts ({cohorts.length})</span>
               </h3>
-              <span className="text-[11px] text-slate-500">Select to manage</span>
+              <button
+                onClick={handleOpenCreateCohort}
+                className="text-[11px] font-bold text-indigo-700 hover:underline flex items-center gap-1"
+              >
+                <Plus className="w-3 h-3" />
+                <span>Add Cohort</span>
+              </button>
             </div>
 
             {cohorts.length === 0 ? (
               <div className="p-8 text-center bg-white rounded-xl border border-slate-200 text-slate-400 text-xs">
-                No training sessions scheduled. Click "New Training Session" to add one.
+                No training sessions scheduled. Click "+ New Training Session" to add one.
               </div>
             ) : (
               <div className="space-y-2.5">
                 {cohorts.map((cohort) => {
                   const isSelected = cohort.id === activeCohort?.id;
-                  const fillPct = Math.round((cohort.enrolledHospitalIds.length / cohort.capacity) * 100);
 
                   return (
                     <div
@@ -388,9 +885,8 @@ export const AdminTrainingTab: React.FC<AdminTrainingTabProps> = ({
                         <h4 className="text-xs font-bold line-clamp-1 pr-12">{cohort.title}</h4>
                         
                         <div className="flex items-center gap-1 shrink-0">
-                          {/* Edit / Delete icons */}
                           <button
-                            onClick={(e) => handleOpenEdit(cohort, e)}
+                            onClick={(e) => handleOpenEditCohort(cohort, e)}
                             title="Edit Training Session"
                             className={`p-1 rounded hover:bg-white/20 transition-colors ${
                               isSelected ? 'text-slate-300 hover:text-white' : 'text-slate-400 hover:text-slate-700'
@@ -404,7 +900,7 @@ export const AdminTrainingTab: React.FC<AdminTrainingTabProps> = ({
                               setCohortToDelete(cohort);
                             }}
                             title="Delete Training Session"
-                            className={`p-1 rounded hover:bg-rose-500/20 text-rose-400 hover:text-rose-600 transition-colors`}
+                            className="p-1 rounded hover:bg-rose-500/20 text-rose-400 hover:text-rose-600 transition-colors"
                           >
                             <Trash2 className="w-3 h-3" />
                           </button>
@@ -469,7 +965,7 @@ export const AdminTrainingTab: React.FC<AdminTrainingTabProps> = ({
 
                   <div className="flex items-center gap-2 shrink-0">
                     <button
-                      onClick={() => handleOpenEdit(activeCohort)}
+                      onClick={() => handleOpenEditCohort(activeCohort)}
                       className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors"
                     >
                       <Edit2 className="w-3.5 h-3.5" />
@@ -483,8 +979,8 @@ export const AdminTrainingTab: React.FC<AdminTrainingTabProps> = ({
                       <span>Delete</span>
                     </button>
                     <button
-                      id="btn-open-assigner-modal"
-                      onClick={() => setShowAssignerModal(true)}
+                      id="btn-open-assigner-cohort-modal"
+                      onClick={() => setShowAssignerCohortModal(true)}
                       className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-xs transition-colors"
                     >
                       <UserCheck className="w-4 h-4" />
@@ -497,15 +993,19 @@ export const AdminTrainingTab: React.FC<AdminTrainingTabProps> = ({
                 <div className="grid grid-cols-3 gap-3 text-center">
                   <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-100">
                     <span className="text-[10px] text-slate-500 uppercase block font-medium">Total Enrolled</span>
-                    <strong className="text-base font-bold text-slate-900">{totalEnrolled}</strong>
+                    <strong className="text-base font-bold text-slate-900">{activeCohort.attendees?.length || 0}</strong>
                   </div>
                   <div className="p-2.5 rounded-lg bg-emerald-50/60 border border-emerald-100">
                     <span className="text-[10px] text-emerald-700 uppercase block font-medium">Attended</span>
-                    <strong className="text-base font-bold text-emerald-800">{attendedCount}</strong>
+                    <strong className="text-base font-bold text-emerald-800">
+                      {activeCohort.attendees?.filter((a) => a.attendanceStatus === 'Attended').length || 0}
+                    </strong>
                   </div>
                   <div className="p-2.5 rounded-lg bg-indigo-50/60 border border-indigo-100">
                     <span className="text-[10px] text-indigo-700 uppercase block font-medium">Converted (Won)</span>
-                    <strong className="text-base font-bold text-indigo-800">{convertedWonCount}</strong>
+                    <strong className="text-base font-bold text-indigo-800">
+                      {activeCohort.attendees?.filter((a) => a.postTrainingStatus === 'Won').length || 0}
+                    </strong>
                   </div>
                 </div>
               </div>
@@ -515,7 +1015,7 @@ export const AdminTrainingTab: React.FC<AdminTrainingTabProps> = ({
                 <div className="p-4 border-b border-slate-100 flex items-center justify-between">
                   <div>
                     <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-                      Attendee Roster ({activeCohort.attendees.length} Hospitals)
+                      Attendee Roster ({activeCohort.attendees?.length || 0} Hospitals)
                     </h4>
                     <p className="text-[11px] text-slate-400">
                       Record live attendance and update post-training conversion status to measure training efficacy
@@ -523,7 +1023,7 @@ export const AdminTrainingTab: React.FC<AdminTrainingTabProps> = ({
                   </div>
                 </div>
 
-                {activeCohort.attendees.length === 0 ? (
+                {(!activeCohort.attendees || activeCohort.attendees.length === 0) ? (
                   <div className="p-8 text-center text-slate-400 text-xs">
                     <span>No hospitals enrolled in this cohort yet. Click "Assign Hospitals" above.</span>
                   </div>
@@ -636,7 +1136,9 @@ export const AdminTrainingTab: React.FC<AdminTrainingTabProps> = ({
         </div>
       )}
 
-      {/* SECTION 2: STATES & CITIES MANAGEMENT */}
+      {/* ========================================================================= */}
+      {/* SECTION 3: STATES & CITIES MANAGEMENT */}
+      {/* ========================================================================= */}
       {adminSection === 'locations' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
           
@@ -786,376 +1288,222 @@ export const AdminTrainingTab: React.FC<AdminTrainingTabProps> = ({
         </div>
       )}
 
-      {/* SECTION 3: YATRA & LIFECYCLE TRACKER */}
-      {adminSection === 'yatra_lifecycle' && (
-        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
-            <div>
-              <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-amber-500" />
-                <span>Hospital Lifecycle & Yatra Summit Touchpoints</span>
-              </h3>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Connect each hospital's initial Yatra event attendance, subsequent training cohorts, and conversion velocity.
-              </p>
-            </div>
-
-            {/* Search & Filter */}
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                value={yatraSearch}
-                onChange={(e) => setYatraSearch(e.target.value)}
-                placeholder="Search hospital or city..."
-                className="p-1.5 px-3 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-800"
-              />
-              <select
-                value={yatraStatusFilter}
-                onChange={(e) => setYatraStatusFilter(e.target.value as any)}
-                className="p-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs text-slate-800 font-medium"
-              >
-                <option value="ALL">All Touchpoints</option>
-                <option value="ATTENDED">Yatra Attended</option>
-                <option value="NOT_ATTENDED">Not Yet Attended Yatra</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-200 text-[10px] uppercase font-bold text-slate-500">
-                  <th className="py-2.5 px-4">Hospital Name & City</th>
-                  <th className="py-2.5 px-4">Yatra Summit Status</th>
-                  <th className="py-2.5 px-4">Training Cohorts</th>
-                  <th className="py-2.5 px-4">Current Stage</th>
-                  <th className="py-2.5 px-4 text-right">Quick Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-xs">
-                {yatraFilteredHospitals.slice(0, 15).map((hosp) => {
-                  const enrolledCount = hosp.enrolledCohortIds?.length || 0;
-
-                  return (
-                    <tr key={hosp.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="py-3 px-4">
-                        <button
-                          onClick={() => onSelectHospital(hosp)}
-                          className="font-semibold text-slate-900 hover:text-blue-600 text-left line-clamp-1"
-                        >
-                          {hosp.organisation}
-                        </button>
-                        <div className="text-[10px] text-slate-400 mt-0.5">
-                          📍 {hosp.city || 'Bhopal'}, {hosp.state || 'MP'} • {hosp.mobile}
-                        </div>
-                      </td>
-
-                      <td className="py-3 px-4">
-                        {hosp.yatraEventAttended ? (
-                          <div>
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
-                              <Sparkles className="w-3 h-3 text-amber-500" />
-                              <span>Attended Yatra ({formatDate(hosp.yatraEventDate)})</span>
-                            </span>
-                            <div className="text-[10px] text-slate-500 mt-0.5">{hosp.yatraEventName || 'Aarogya Yatra'}</div>
-                          </div>
-                        ) : (
-                          <span className="text-[11px] text-slate-400">No Yatra Recorded</span>
-                        )}
-                      </td>
-
-                      <td className="py-3 px-4">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          enrolledCount > 0 ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : 'bg-slate-100 text-slate-600'
-                        }`}>
-                          {enrolledCount} Cohorts
-                        </span>
-                      </td>
-
-                      <td className="py-3 px-4">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${getStatusBadgeClass(hosp.callStatus)}`}>
-                          {hosp.callStatus}
-                        </span>
-                      </td>
-
-                      <td className="py-3 px-4 text-right">
-                        <button
-                          onClick={() => onUpdateHospitalYatra(
-                            hosp.id, 
-                            !hosp.yatraEventAttended, 
-                            `Aarogya Yatra ${hosp.city || 'Bhopal'} Summit 2026`,
-                            '2026-06-15'
-                          )}
-                          className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors ${
-                            hosp.yatraEventAttended
-                              ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                              : 'bg-amber-500 hover:bg-amber-600 text-white shadow-2xs'
-                          }`}
-                        >
-                          {hosp.yatraEventAttended ? 'Remove Yatra' : '+ Log Yatra Event'}
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* CREATE COHORT MODAL */}
-      {showCreateModal && (
+      {/* ========================================================================= */}
+      {/* MODAL 1: CREATE / SCHEDULE YATRA EVENT MODAL */}
+      {/* ========================================================================= */}
+      {showCreateYatraModal && (
         <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-2xs">
           <div className="bg-white rounded-2xl border border-slate-200 max-w-lg w-full p-6 shadow-xl space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <GraduationCap className="w-5 h-5 text-indigo-600" />
-                <span>Schedule New Training Session</span>
+                <Sparkles className="w-5 h-5 text-amber-500" />
+                <span>Add Yatra Event</span>
               </h3>
-              <button onClick={() => setShowCreateModal(false)} className="text-slate-400 hover:text-slate-600">✕</button>
+              <button onClick={() => setShowCreateYatraModal(false)} className="text-slate-400 hover:text-slate-600">✕</button>
             </div>
 
-            <form onSubmit={handleCreateSubmit} className="space-y-3.5 text-xs">
+            <form onSubmit={handleCreateYatraSubmit} className="space-y-3.5 text-xs">
+              
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Yatra Date <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={yatraFormDate}
+                    onChange={(e) => setYatraFormDate(e.target.value)}
+                    className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-800 font-medium"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Yatra City <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    list="yatra-city-list"
+                    value={yatraFormCity}
+                    onChange={(e) => {
+                      const c = e.target.value;
+                      setYatraFormCity(c);
+                      setYatraFormTitle(`Aarogya Yatra ${c} Healthcare Summit`);
+                      setYatraFormVenue(`${c} Medical Chamber`);
+                    }}
+                    placeholder="e.g. Bhopal"
+                    className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-800 font-medium"
+                    required
+                  />
+                  <datalist id="yatra-city-list">
+                    {allCities.map((c) => (
+                      <option key={c} value={c} />
+                    ))}
+                  </datalist>
+                </div>
+              </div>
+
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">
-                  Session Title <span className="text-red-500">*</span>
+                  Event Title / Name
                 </label>
                 <input
                   type="text"
-                  value={formTitle}
-                  onChange={(e) => setFormTitle(e.target.value)}
-                  placeholder="e.g. NABH 5th Edition Accreditation Implementation Intensive"
-                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-slate-800 font-medium"
-                  required
+                  value={yatraFormTitle}
+                  onChange={(e) => setYatraFormTitle(e.target.value)}
+                  placeholder="e.g. Aarogya Yatra Bhopal Healthcare Summit"
+                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-slate-800"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Date <span className="text-red-500">*</span></label>
+                  <label className="block font-semibold text-slate-700 mb-1">Operating State</label>
+                  <select
+                    value={yatraFormState}
+                    onChange={(e) => setYatraFormState(e.target.value)}
+                    className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-800"
+                  >
+                    {states.map((st) => (
+                      <option key={st.id} value={st.name}>
+                        {st.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Venue / Hall Location</label>
+                  <input
+                    type="text"
+                    value={yatraFormVenue}
+                    onChange={(e) => setYatraFormVenue(e.target.value)}
+                    placeholder="e.g. IMA Auditorium"
+                    className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-800"
+                  />
+                </div>
+              </div>
+
+              <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-xl text-[11px] text-amber-900 leading-relaxed">
+                💡 <strong>Multi-Hospital Mapping:</strong> After saving this Yatra event, you can map multiple hospitals to it with 1 click using the multi-selector.
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateYatraModal(false)}
+                  className="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold shadow-xs transition-colors"
+                >
+                  Save Yatra Event
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 2: EDIT YATRA EVENT MODAL */}
+      {/* ========================================================================= */}
+      {showEditYatraModal && editingYatra && (
+        <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-2xs">
+          <div className="bg-white rounded-2xl border border-slate-200 max-w-lg w-full p-6 shadow-xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <Edit2 className="w-4 h-4 text-amber-600" />
+                <span>Edit Yatra Event</span>
+              </h3>
+              <button onClick={() => setShowEditYatraModal(false)} className="text-slate-400 hover:text-slate-600">✕</button>
+            </div>
+
+            <form onSubmit={handleEditYatraSubmit} className="space-y-3.5 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Yatra Date <span className="text-red-500">*</span>
+                  </label>
                   <input
                     type="date"
-                    value={formDate}
-                    onChange={(e) => setFormDate(e.target.value)}
-                    className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-800"
+                    value={yatraFormDate}
+                    onChange={(e) => setYatraFormDate(e.target.value)}
+                    className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-800 font-medium"
                     required
                   />
                 </div>
+
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Timing</label>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Yatra City <span className="text-red-500">*</span>
+                  </label>
                   <input
                     type="text"
-                    value={formTime}
-                    onChange={(e) => setFormTime(e.target.value)}
-                    className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-800"
+                    value={yatraFormCity}
+                    onChange={(e) => setYatraFormCity(e.target.value)}
+                    className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-800 font-medium"
+                    required
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Event Title / Name
+                </label>
+                <input
+                  type="text"
+                  value={yatraFormTitle}
+                  onChange={(e) => setYatraFormTitle(e.target.value)}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-slate-800"
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">State</label>
                   <select
-                    value={formState}
-                    onChange={(e) => {
-                      setFormState(e.target.value);
-                      const match = states.find((s) => s.name === e.target.value);
-                      if (match && match.cities.length > 0) {
-                        setFormCity(match.cities[0]);
-                      }
-                    }}
+                    value={yatraFormState}
+                    onChange={(e) => setYatraFormState(e.target.value)}
                     className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-800"
                   >
                     {states.map((st) => (
-                      <option key={st.id} value={st.name}>{st.name}</option>
+                      <option key={st.id} value={st.name}>
+                        {st.name}
+                      </option>
                     ))}
                   </select>
                 </div>
+
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">City</label>
-                  <select
-                    value={formCity}
-                    onChange={(e) => setFormCity(e.target.value)}
-                    className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-800"
-                  >
-                    {states.find((s) => s.name === formState)?.cities.map((c) => (
-                      <option key={c} value={c}>{c}</option>
-                    )) || <option value="Bhopal">Bhopal</option>}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Mode</label>
-                  <select
-                    value={formMode}
-                    onChange={(e) => setFormMode(e.target.value as any)}
-                    className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-800"
-                  >
-                    <option value="In-Person">In-Person Workshop</option>
-                    <option value="Virtual">Virtual Webinar</option>
-                    <option value="Hybrid">Hybrid</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Max Capacity</label>
-                  <input
-                    type="number"
-                    value={formCapacity}
-                    onChange={(e) => setFormCapacity(Number(e.target.value))}
-                    className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-800"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Lead Assessor / Trainer</label>
-                <input
-                  type="text"
-                  value={formTrainer}
-                  onChange={(e) => setFormTrainer(e.target.value)}
-                  placeholder="e.g. Dr. Amitabh Sen (Assessor & Principal Advisor)"
-                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-slate-800"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Venue / Hall</label>
-                <input
-                  type="text"
-                  value={formVenue}
-                  onChange={(e) => setFormVenue(e.target.value)}
-                  placeholder="e.g. Taj Lakefront Convention Center, Bhopal"
-                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-slate-800"
-                />
-              </div>
-
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowCreateModal(false)}
-                  className="px-4 py-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-100 font-medium"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow-xs"
-                >
-                  Schedule Session
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* EDIT COHORT MODAL */}
-      {showEditModal && editingCohort && (
-        <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-2xs">
-          <div className="bg-white rounded-2xl border border-slate-200 max-w-lg w-full p-6 shadow-xl space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <Edit2 className="w-5 h-5 text-indigo-600" />
-                <span>Edit Training Session</span>
-              </h3>
-              <button onClick={() => setShowEditModal(false)} className="text-slate-400 hover:text-slate-600">✕</button>
-            </div>
-
-            <form onSubmit={handleEditSubmit} className="space-y-3.5 text-xs">
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Session Title</label>
-                <input
-                  type="text"
-                  value={formTitle}
-                  onChange={(e) => setFormTitle(e.target.value)}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-slate-800 font-medium"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Status</label>
-                  <select
-                    value={formStatus}
-                    onChange={(e) => setFormStatus(e.target.value as any)}
-                    className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-800 font-semibold"
-                  >
-                    <option value="Upcoming">Upcoming</option>
-                    <option value="In Progress">In Progress</option>
-                    <option value="Completed">Completed</option>
-                    <option value="Cancelled">Cancelled</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Date</label>
-                  <input
-                    type="date"
-                    value={formDate}
-                    onChange={(e) => setFormDate(e.target.value)}
-                    className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-800"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">City</label>
+                  <label className="block font-semibold text-slate-700 mb-1">Venue</label>
                   <input
                     type="text"
-                    value={formCity}
-                    onChange={(e) => setFormCity(e.target.value)}
-                    className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-800"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Capacity</label>
-                  <input
-                    type="number"
-                    value={formCapacity}
-                    onChange={(e) => setFormCapacity(Number(e.target.value))}
+                    value={yatraFormVenue}
+                    onChange={(e) => setYatraFormVenue(e.target.value)}
                     className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-800"
                   />
                 </div>
               </div>
 
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Trainer Name</label>
-                <input
-                  type="text"
-                  value={formTrainer}
-                  onChange={(e) => setFormTrainer(e.target.value)}
-                  className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-800"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Venue</label>
-                <input
-                  type="text"
-                  value={formVenue}
-                  onChange={(e) => setFormVenue(e.target.value)}
-                  className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-800"
-                />
-              </div>
-
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => setShowEditModal(false)}
-                  className="px-4 py-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-100 font-medium"
+                  onClick={() => setShowEditYatraModal(false)}
+                  className="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 font-medium"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow-xs"
+                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-bold shadow-xs transition-colors"
                 >
-                  Save Changes
+                  Update Yatra
                 </button>
               </div>
             </form>
@@ -1163,101 +1511,73 @@ export const AdminTrainingTab: React.FC<AdminTrainingTabProps> = ({
         </div>
       )}
 
-      {/* DELETE CONFIRMATION MODAL */}
-      {cohortToDelete && (
-        <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-2xs">
-          <div className="bg-white rounded-2xl border border-slate-200 max-w-md w-full p-6 shadow-xl space-y-4">
-            <div className="flex items-center gap-3 text-rose-600">
-              <div className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center">
-                <Trash2 className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-slate-900">Delete Training Session</h3>
-                <p className="text-xs text-slate-500">This action cannot be undone.</p>
-              </div>
-            </div>
-
-            <p className="text-xs text-slate-700">
-              Are you sure you want to delete <strong className="text-slate-900 font-semibold">"{cohortToDelete.title}"</strong>? 
-              This will remove all ({cohortToDelete.attendees.length}) attendee enrollments from this session.
-            </p>
-
-            <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setCohortToDelete(null)}
-                className="px-4 py-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-100 text-xs font-medium"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleDeleteConfirm}
-                className="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-xs"
-              >
-                Delete Training
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* HOSPITAL ASSIGNER MODAL */}
-      {showAssignerModal && activeCohort && (
+      {/* ========================================================================= */}
+      {/* MODAL 3: MAP MULTIPLE HOSPITALS UNDER ONE YATRA MODAL */}
+      {/* ========================================================================= */}
+      {showYatraHospitalMapperModal && activeYatra && (
         <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-2xs">
           <div className="bg-white rounded-2xl border border-slate-200 max-w-3xl w-full p-6 shadow-xl space-y-4">
             
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div>
                 <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                  <UserCheck className="w-5 h-5 text-indigo-600" />
-                  <span>Assign Hospitals to "{activeCohort.title}"</span>
+                  <Sparkles className="w-5 h-5 text-amber-500" />
+                  <span>Map Hospitals to Yatra: {activeYatra.city} ({formatDate(activeYatra.date)})</span>
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Select hospitals from your tracker to enroll into this cohort ({activeCohort.enrolledHospitalIds.length}/{activeCohort.capacity} filled)
+                  Select multiple hospitals that attended this Yatra event. In the conversion pipeline, their Yatra column will reflect this city and date.
                 </p>
               </div>
               <button
-                onClick={() => setShowAssignerModal(false)}
+                onClick={() => setShowYatraHospitalMapperModal(false)}
                 className="text-slate-400 hover:text-slate-600"
               >
                 ✕
               </button>
             </div>
 
-            {/* Assigner filter controls */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+            {/* Filter controls */}
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 text-xs">
               <input
                 type="text"
-                value={assignerSearch}
-                onChange={(e) => setAssignerSearch(e.target.value)}
-                placeholder="Search organization or contact..."
+                value={yatraMapperSearch}
+                onChange={(e) => setYatraMapperSearch(e.target.value)}
+                placeholder="Search hospital or mobile..."
                 className="p-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-800"
               />
               <select
-                value={assignerStatus}
-                onChange={(e) => setAssignerStatus(e.target.value)}
+                value={yatraMapperStatus}
+                onChange={(e) => setYatraMapperStatus(e.target.value)}
                 className="p-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-800"
               >
                 <option value="ALL">All Call Statuses</option>
-                <option value="Hot">Hot</option>
-                <option value="Warm">Warm</option>
-                <option value="Application in progress">Application in progress</option>
-                <option value="Engaged">Engaged</option>
+                {callStatuses.map((st) => (
+                  <option key={st} value={st}>{st}</option>
+                ))}
+              </select>
+              <select
+                value={yatraMapperCity}
+                onChange={(e) => setYatraMapperCity(e.target.value)}
+                className="p-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-800"
+              >
+                <option value="ALL">All Cities</option>
+                {allCities.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
               </select>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={selectAllCandidates}
-                  className="flex-1 p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-medium"
+                  onClick={selectAllYatraCandidates}
+                  className="flex-1 p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold"
                 >
-                  Select All
+                  Select All ({candidateHospitalsForYatra.length})
                 </button>
-                {selectedForEnrollment.length > 0 && (
+                {selectedHospitalsForYatra.length > 0 && (
                   <button
                     type="button"
-                    onClick={clearSelection}
-                    className="p-2 text-rose-600 hover:bg-rose-50 rounded-lg"
+                    onClick={clearYatraCandidatesSelection}
+                    className="p-2 text-rose-600 hover:bg-rose-50 rounded-lg text-xs"
                   >
                     Clear
                   </button>
@@ -1265,30 +1585,30 @@ export const AdminTrainingTab: React.FC<AdminTrainingTabProps> = ({
               </div>
             </div>
 
-            {/* Candidate List Checkboxes */}
-            <div className="max-h-72 overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-100 text-xs">
-              {candidateHospitals.length === 0 ? (
-                <div className="p-6 text-center text-slate-400">
-                  No eligible candidate hospitals found matching these filters.
+            {/* Hospital Checkboxes List */}
+            <div className="max-h-80 overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-100 text-xs">
+              {candidateHospitalsForYatra.length === 0 ? (
+                <div className="p-8 text-center text-slate-400">
+                  No candidate hospitals found matching these search & filter criteria.
                 </div>
               ) : (
-                candidateHospitals.map((hospital) => {
-                  const isChecked = selectedForEnrollment.includes(hospital.id);
+                candidateHospitalsForYatra.map((hospital) => {
+                  const isChecked = selectedHospitalsForYatra.includes(hospital.id);
                   const fullName = [hospital.firstName, hospital.lastName].filter(Boolean).join(' ') || '—';
 
                   return (
                     <label
                       key={hospital.id}
-                      className={`flex items-center justify-between p-3 cursor-pointer hover:bg-indigo-50/40 transition-colors ${
-                        isChecked ? 'bg-indigo-50/80 font-medium' : ''
+                      className={`flex items-center justify-between p-3 cursor-pointer hover:bg-amber-50/50 transition-colors ${
+                        isChecked ? 'bg-amber-50/90 font-medium' : ''
                       }`}
                     >
                       <div className="flex items-start gap-3">
                         <input
                           type="checkbox"
                           checked={isChecked}
-                          onChange={() => toggleSelectHospital(hospital.id)}
-                          className="mt-1 w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer"
+                          onChange={() => toggleSelectHospitalForYatra(hospital.id)}
+                          className="mt-1 w-4 h-4 text-amber-600 rounded border-slate-300 focus:ring-amber-500 cursor-pointer"
                         />
                         <div>
                           <div className="font-semibold text-slate-900">{hospital.organisation}</div>
@@ -1317,25 +1637,430 @@ export const AdminTrainingTab: React.FC<AdminTrainingTabProps> = ({
             {/* Modal footer */}
             <div className="flex items-center justify-between pt-3 border-t border-slate-100">
               <span className="text-xs text-slate-600 font-medium">
-                Selected: <strong className="text-indigo-700 font-bold">{selectedForEnrollment.length}</strong> hospitals
+                Selected for Mapping: <strong className="text-amber-800 font-bold">{selectedHospitalsForYatra.length}</strong> hospitals
               </span>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => setShowAssignerModal(false)}
+                  onClick={() => setShowYatraHospitalMapperModal(false)}
                   className="px-4 py-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-100 text-xs font-medium"
                 >
                   Cancel
                 </button>
                 <button
-                  disabled={selectedForEnrollment.length === 0}
-                  onClick={handleConfirmEnrollment}
-                  className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold shadow-xs transition-colors"
+                  disabled={selectedHospitalsForYatra.length === 0}
+                  onClick={handleConfirmYatraHospitalMapping}
+                  className="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold shadow-xs transition-colors"
                 >
-                  Enroll {selectedForEnrollment.length} Hospitals
+                  Map {selectedHospitalsForYatra.length} Hospital{selectedHospitalsForYatra.length !== 1 ? 's' : ''} to Yatra
                 </button>
               </div>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* DELETE CONFIRMATION MODALS */}
+      {/* ========================================================================= */}
+      {yatraToDelete && (
+        <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-2xs">
+          <div className="bg-white rounded-2xl border border-slate-200 max-w-md w-full p-6 shadow-xl space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center font-bold">
+                ⚠️
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">Delete Yatra Event?</h3>
+                <p className="text-xs text-slate-500">"{yatraToDelete.title}"</p>
+              </div>
+            </div>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Are you sure you want to delete this Yatra event in <strong>{yatraToDelete.city}</strong>? Mapped hospitals will be unlinked from this event.
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+              <button
+                onClick={() => setYatraToDelete(null)}
+                className="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 text-xs font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteYatraConfirm}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold shadow-xs"
+              >
+                Delete Yatra Event
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {cohortToDelete && (
+        <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-2xs">
+          <div className="bg-white rounded-2xl border border-slate-200 max-w-md w-full p-6 shadow-xl space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center font-bold">
+                ⚠️
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">Delete Training Session?</h3>
+                <p className="text-xs text-slate-500">"{cohortToDelete.title}"</p>
+              </div>
+            </div>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Are you sure you want to delete this training cohort? All attendance records for this session will be removed.
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+              <button
+                onClick={() => setCohortToDelete(null)}
+                className="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 text-xs font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteCohortConfirm}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-bold shadow-xs"
+              >
+                Delete Training Session
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* COHORT MODALS (Create, Edit, Assigner) */}
+      {/* ========================================================================= */}
+      {showCreateCohortModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-2xs">
+          <div className="bg-white rounded-2xl border border-slate-200 max-w-lg w-full p-6 shadow-xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <GraduationCap className="w-5 h-5 text-indigo-600" />
+                <span>Schedule New Training Session</span>
+              </h3>
+              <button onClick={() => setShowCreateCohortModal(false)} className="text-slate-400 hover:text-slate-600">✕</button>
+            </div>
+
+            <form onSubmit={handleCreateCohortSubmit} className="space-y-3.5 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Session Title <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={cohortFormTitle}
+                  onChange={(e) => setCohortFormTitle(e.target.value)}
+                  placeholder="e.g. NABH 5th Edition Accreditation Implementation Intensive"
+                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-slate-800 font-medium"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Date <span className="text-red-500">*</span></label>
+                  <input
+                    type="date"
+                    value={cohortFormDate}
+                    onChange={(e) => setCohortFormDate(e.target.value)}
+                    className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-800"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Time</label>
+                  <input
+                    type="text"
+                    value={cohortFormTime}
+                    onChange={(e) => setCohortFormTime(e.target.value)}
+                    className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-800"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">State</label>
+                  <select
+                    value={cohortFormState}
+                    onChange={(e) => setCohortFormState(e.target.value)}
+                    className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-800"
+                  >
+                    {states.map((st) => (
+                      <option key={st.id} value={st.name}>{st.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">City</label>
+                  <select
+                    value={cohortFormCity}
+                    onChange={(e) => setCohortFormCity(e.target.value)}
+                    className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-800"
+                  >
+                    {allCities.map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Mode</label>
+                  <select
+                    value={cohortFormMode}
+                    onChange={(e) => setCohortFormMode(e.target.value as any)}
+                    className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-800"
+                  >
+                    <option value="In-Person">In-Person</option>
+                    <option value="Virtual">Virtual / Webinar</option>
+                    <option value="Hybrid">Hybrid</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Capacity</label>
+                  <input
+                    type="number"
+                    value={cohortFormCapacity}
+                    onChange={(e) => setCohortFormCapacity(Number(e.target.value))}
+                    min={5}
+                    max={200}
+                    className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-800"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Status</label>
+                  <select
+                    value={cohortFormStatus}
+                    onChange={(e) => setCohortFormStatus(e.target.value as any)}
+                    className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-800"
+                  >
+                    <option value="Upcoming">Upcoming</option>
+                    <option value="In Progress">In Progress</option>
+                    <option value="Completed">Completed</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Trainer / Lead Assessor</label>
+                <input
+                  type="text"
+                  value={cohortFormTrainer}
+                  onChange={(e) => setCohortFormTrainer(e.target.value)}
+                  placeholder="e.g. Dr. Amitabh Sen (Lead NABH Assessor)"
+                  className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-800"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateCohortModal(false)}
+                  className="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold shadow-xs transition-colors"
+                >
+                  Schedule Session
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showEditCohortModal && editingCohort && (
+        <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-2xs">
+          <div className="bg-white rounded-2xl border border-slate-200 max-w-lg w-full p-6 shadow-xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <Edit2 className="w-4 h-4 text-indigo-600" />
+                <span>Edit Training Session</span>
+              </h3>
+              <button onClick={() => setShowEditCohortModal(false)} className="text-slate-400 hover:text-slate-600">✕</button>
+            </div>
+
+            <form onSubmit={handleEditCohortSubmit} className="space-y-3.5 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Session Title</label>
+                <input
+                  type="text"
+                  value={cohortFormTitle}
+                  onChange={(e) => setCohortFormTitle(e.target.value)}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg text-slate-800 font-medium"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Date</label>
+                  <input
+                    type="date"
+                    value={cohortFormDate}
+                    onChange={(e) => setCohortFormDate(e.target.value)}
+                    className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-800"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Status</label>
+                  <select
+                    value={cohortFormStatus}
+                    onChange={(e) => setCohortFormStatus(e.target.value as any)}
+                    className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-800"
+                  >
+                    <option value="Upcoming">Upcoming</option>
+                    <option value="In Progress">In Progress</option>
+                    <option value="Completed">Completed</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowEditCohortModal(false)}
+                  className="px-4 py-2 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-bold shadow-xs transition-colors"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* COHORT ASSIGNER MODAL */}
+      {showAssignerCohortModal && activeCohort && (
+        <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-2xs">
+          <div className="bg-white rounded-2xl border border-slate-200 max-w-3xl w-full p-6 shadow-xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <UserCheck className="w-5 h-5 text-indigo-600" />
+                  <span>Assign Hospitals to "{activeCohort.title}"</span>
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Select hospitals from your pipeline to enroll into this cohort ({activeCohort.enrolledHospitalIds.length}/{activeCohort.capacity} filled)
+                </p>
+              </div>
+              <button
+                onClick={() => setShowAssignerCohortModal(false)}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+              <input
+                type="text"
+                value={assignerSearch}
+                onChange={(e) => setAssignerSearch(e.target.value)}
+                placeholder="Search hospital or contact..."
+                className="p-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-800"
+              />
+              <select
+                value={assignerStatus}
+                onChange={(e) => setAssignerStatus(e.target.value)}
+                className="p-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-800"
+              >
+                <option value="ALL">All Call Statuses</option>
+                {callStatuses.map((st) => (
+                  <option key={st} value={st}>{st}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => setSelectedForCohortEnrollment(candidateHospitalsForCohort.map((h) => h.id))}
+                className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold"
+              >
+                Select All Candidates ({candidateHospitalsForCohort.length})
+              </button>
+            </div>
+
+            <div className="max-h-72 overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-100 text-xs">
+              {candidateHospitalsForCohort.length === 0 ? (
+                <div className="p-6 text-center text-slate-400">
+                  No eligible candidate hospitals found matching these filters.
+                </div>
+              ) : (
+                candidateHospitalsForCohort.map((hospital) => {
+                  const isChecked = selectedForCohortEnrollment.includes(hospital.id);
+                  const fullName = [hospital.firstName, hospital.lastName].filter(Boolean).join(' ') || '—';
+
+                  return (
+                    <label
+                      key={hospital.id}
+                      className={`flex items-center justify-between p-3 cursor-pointer hover:bg-indigo-50/40 transition-colors ${
+                        isChecked ? 'bg-indigo-50/80 font-medium' : ''
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => toggleSelectHospitalForCohort(hospital.id)}
+                          className="mt-1 w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer"
+                        />
+                        <div>
+                          <div className="font-semibold text-slate-900">{hospital.organisation}</div>
+                          <div className="text-[11px] text-slate-500 flex items-center gap-2 mt-0.5">
+                            <span>📍 {hospital.city || 'Bhopal'}</span>
+                            <span>• Contact: {fullName}</span>
+                            <span className="font-mono">({hospital.mobile})</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${getCategoryBadgeClass(hospital.accreditationCategory)}`}>
+                          {hospital.accreditationCategory}
+                        </span>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-medium border ${getStatusBadgeClass(hospital.callStatus)}`}>
+                          {hospital.callStatus}
+                        </span>
+                      </div>
+                    </label>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+              <span className="text-xs text-slate-600 font-medium">
+                Selected: <strong className="text-indigo-700 font-bold">{selectedForCohortEnrollment.length}</strong> hospitals
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowAssignerCohortModal(false)}
+                  className="px-4 py-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-100 text-xs font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  disabled={selectedForCohortEnrollment.length === 0}
+                  onClick={handleConfirmCohortEnrollment}
+                  className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold shadow-xs transition-colors"
+                >
+                  Enroll {selectedForCohortEnrollment.length} Hospitals
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

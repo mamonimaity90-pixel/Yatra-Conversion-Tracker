@@ -99,6 +99,17 @@ export interface CohortAttendee {
   convertedDate?: string;
 }
 
+export interface YatraEvent {
+  id: string;
+  title: string;
+  city: string;
+  state?: string;
+  date: string; // YYYY-MM-DD
+  venue?: string;
+  hospitalIds: string[];
+  createdAt?: string;
+}
+
 export interface LifecycleMilestone {
   id: string;
   type: 'yatra' | 'training' | 'call' | 'application' | 'conversion';

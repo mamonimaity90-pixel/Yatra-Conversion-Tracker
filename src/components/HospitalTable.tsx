@@ -82,7 +82,7 @@ export const HospitalTable: React.FC<HospitalTableProps> = ({
               <th className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 min-w-[140px]">Contact Person</th>
               <th className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 min-w-[120px]">Mobile</th>
               <th className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 min-w-[130px]">Call Status</th>
-              <th className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 min-w-[110px]">Lifecycle / Yatra</th>
+              <th className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 min-w-[140px]">Yatra (City & Date)</th>
               <th className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 min-w-[140px]">Accreditation Category</th>
               <th className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 min-w-[100px]">Expiry Date</th>
               <th className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 min-w-[130px]">Renewal Urgency</th>
@@ -170,24 +170,21 @@ export const HospitalTable: React.FC<HospitalTableProps> = ({
                     </div>
                   </td>
 
-                  {/* Lifecycle & Yatra */}
+                  {/* Yatra (City & Date) */}
                   <td className="px-4 py-3">
-                    <div className="flex flex-col gap-1">
-                      {hospital.yatraEventAttended ? (
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-200 w-fit">
+                    {hospital.yatraEventAttended ? (
+                      <div className="flex flex-col">
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 w-fit">
                           <Sparkles className="w-2.5 h-2.5 text-amber-500" />
-                          <span>Yatra</span>
+                          <span>{hospital.yatraCity || hospital.city || 'Yatra'}</span>
                         </span>
-                      ) : (
-                        <span className="text-[10px] text-slate-400">No Yatra</span>
-                      )}
-                      {trainingCount > 0 && (
-                        <span className="inline-flex items-center gap-1 text-[10px] text-indigo-700 font-medium">
-                          <GraduationCap className="w-3 h-3 text-indigo-500" />
-                          <span>{trainingCount} training{trainingCount > 1 ? 's' : ''}</span>
+                        <span className="text-[10px] text-slate-500 font-mono mt-0.5">
+                          {formatDate(hospital.yatraEventDate)}
                         </span>
-                      )}
-                    </div>
+                      </div>
+                    ) : (
+                      <span className="text-[11px] text-slate-400 italic">No Yatra</span>
+                    )}
                   </td>
 
                   {/* Accreditation Category */}

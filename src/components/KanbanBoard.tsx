@@ -141,6 +141,12 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                           {hospital.accreditationCategory}
                         </span>
                         <div className="flex items-center gap-1">
+                          {hospital.yatraEventAttended && (
+                            <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-0.5" title={`Attended Yatra in ${hospital.yatraCity || hospital.city || 'Yatra'} on ${formatDate(hospital.yatraEventDate)}`}>
+                              <span className="text-amber-500">★</span>
+                              <span>{hospital.yatraCity || hospital.city || 'Yatra'}</span>
+                            </span>
+                          )}
                           {hospital.renewalUrgency && (
                             <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-bold ${getUrgencyBadgeClass(hospital.renewalUrgency)}`}>
                               {hospital.renewalUrgency}

@@ -1,4 +1,4 @@
-import { Hospital, TrainingCohort, StateLocation } from '../types';
+import { Hospital, TrainingCohort, StateLocation, YatraEvent } from '../types';
 
 interface RawRow {
   org: string;
@@ -322,3 +322,68 @@ export const INITIAL_HOSPITALS: Hospital[] = RAW_DATA.map((row, idx) => {
 });
 
 export const INITIAL_COHORTS: TrainingCohort[] = [];
+
+export const INITIAL_YATRAS: YatraEvent[] = [
+  {
+    id: 'yatra-bhopal-2026',
+    title: 'Aarogya Yatra Bhopal Healthcare Summit',
+    city: 'Bhopal',
+    state: 'Madhya Pradesh',
+    date: '2026-06-15',
+    venue: 'Bhopal Quality Hall & Medical Chamber',
+    hospitalIds: [
+      'hosp-sheet-1',
+      'hosp-sheet-3',
+      'hosp-sheet-4',
+      'hosp-sheet-7',
+      'hosp-sheet-11',
+      'hosp-sheet-13',
+      'hosp-sheet-19',
+      'hosp-sheet-20',
+      'hosp-sheet-26',
+      'hosp-sheet-30'
+    ]
+  },
+  {
+    id: 'yatra-indore-2026',
+    title: 'Aarogya Yatra Indore Quality Convention',
+    city: 'Indore',
+    state: 'Madhya Pradesh',
+    date: '2026-05-20',
+    venue: 'Indore Medical Association Auditorium',
+    hospitalIds: [
+      'hosp-sheet-2',
+      'hosp-sheet-5',
+      'hosp-sheet-8',
+      'hosp-sheet-14',
+      'hosp-sheet-21'
+    ]
+  },
+  {
+    id: 'yatra-jabalpur-2026',
+    title: 'Aarogya Yatra Jabalpur Regional Summit',
+    city: 'Jabalpur',
+    state: 'Madhya Pradesh',
+    date: '2026-07-10',
+    venue: 'Jabalpur Civic & Healthcare Center',
+    hospitalIds: [
+      'hosp-sheet-6',
+      'hosp-sheet-10',
+      'hosp-sheet-15'
+    ]
+  },
+  {
+    id: 'yatra-gwalior-2026',
+    title: 'Aarogya Yatra Gwalior Conclave',
+    city: 'Gwalior',
+    state: 'Madhya Pradesh',
+    date: '2026-04-18',
+    venue: 'Gwalior Chamber of Commerce & Healthcare',
+    hospitalIds: [
+      'hosp-sheet-9',
+      'hosp-sheet-12',
+      'hosp-sheet-18'
+    ]
+  }
+];
+

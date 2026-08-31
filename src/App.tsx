@@ -11,12 +11,13 @@ import { EditHospitalModal } from './components/EditHospitalModal';
 import { AdminTrainingTab } from './components/AdminTrainingTab';
 import { AnalyticsTab } from './components/AnalyticsTab';
 import { Toast, ToastMessage } from './components/Toast';
-import { INITIAL_HOSPITALS, INITIAL_COHORTS, INITIAL_STATES } from './data/initialHospitals';
-import { Hospital, TrainingCohort, CallStatus, InteractionRemark, StateLocation, CohortAttendee } from './types';
+import { INITIAL_HOSPITALS, INITIAL_COHORTS, INITIAL_STATES, INITIAL_YATRAS } from './data/initialHospitals';
+import { Hospital, TrainingCohort, CallStatus, InteractionRemark, StateLocation, CohortAttendee, YatraEvent } from './types';
 
 const HOSPITALS_STORAGE_KEY = 'yatra_conversion_hospitals_v4';
 const COHORTS_STORAGE_KEY = 'yatra_conversion_cohorts_v4';
 const STATES_STORAGE_KEY = 'yatra_conversion_states_v4';
+const YATRAS_STORAGE_KEY = 'yatra_conversion_events_v4';
 
 export default function App() {
   // Navigation & View state - Default to 'analytics' (Insights & Reports) on the first tab
@@ -61,6 +62,18 @@ export default function App() {
     return INITIAL_STATES;
   });
 
+  const [yatras, setYatras] = useState<YatraEvent[]>(() => {
+    try {
+      const saved = localStorage.getItem(YATRAS_STORAGE_KEY);
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch (err) {
+      console.error('Failed to load yatras from storage', err);
+    }
+    return INITIAL_YATRAS;
+  });
+
   // Sync state to localStorage
   useEffect(() => {
     try {
@@ -85,6 +98,14 @@ export default function App() {
       console.error('Failed to save states to storage', err);
     }
   }, [states]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(YATRAS_STORAGE_KEY, JSON.stringify(yatras));
+    } catch (err) {
+      console.error('Failed to save yatras to storage', err);
+    }
+  }, [yatras]);
 
   // Modals & Selection state
   const [selectedHospital, setSelectedHospital] = useState<Hospital | null>(null);
@@ -129,9 +150,11 @@ export default function App() {
       setHospitals(INITIAL_HOSPITALS);
       setCohorts(INITIAL_COHORTS);
       setStates(INITIAL_STATES);
+      setYatras(INITIAL_YATRAS);
       localStorage.removeItem(HOSPITALS_STORAGE_KEY);
       localStorage.removeItem(COHORTS_STORAGE_KEY);
       localStorage.removeItem(STATES_STORAGE_KEY);
+      localStorage.removeItem(YATRAS_STORAGE_KEY);
       addToast('info', 'Data Reset', 'Restored initial sample data.');
     }
   };
@@ -308,6 +331,11 @@ export default function App() {
     addToast('success', 'Training Session Created', `"${newCohort.title}" scheduled.`);
   };
 
+  const handleEditCohort = (updatedCohort: TrainingCohort) => {
+    setCohorts((prev) => prev.map((c) => (c.id === updatedCohort.id ? updatedCohort : c)));
+    addToast('success', 'Training Session Updated', `"${updatedCohort.title}" updated.`);
+  };
+
   const handleDeleteCohort = (cohortId: string) => {
     const cohort = cohorts.find((c) => c.id === cohortId);
     setCohorts((prev) => prev.filter((c) => c.id !== cohortId));
@@ -479,23 +507,130 @@ export default function App() {
     addToast('info', 'City Removed', `Removed ${cityName}.`);
   };
 
-  // Quick toggle Yatra event attendance
-  const handleToggleYatraAttendance = (hospitalId: string, attended: boolean, eventDate?: string) => {
+  // Yatra Event Handlers
+  const handleCreateYatra = (newYatraData: Omit<YatraEvent, 'id'>) => {
+    const newYatra: YatraEvent = {
+      ...newYatraData,
+      id: `yatra-${Date.now()}`
+    };
+
+    setYatras((prev) => [newYatra, ...prev]);
+    addToast('success', 'Yatra Event Added', `Scheduled "${newYatra.title}" in ${newYatra.city}.`);
+  };
+
+  const handleEditYatra = (updatedYatra: YatraEvent) => {
+    setYatras((prev) => prev.map((y) => (y.id === updatedYatra.id ? updatedYatra : y)));
+
+    // Synchronize mapped hospitals
     setHospitals((prev) =>
       prev.map((h) => {
-        if (h.id === hospitalId) {
+        if (updatedYatra.hospitalIds.includes(h.id)) {
           return {
             ...h,
-            yatraEventAttended: attended,
-            yatraEventDate: attended ? (eventDate || '2026-06-15') : undefined,
-            yatraEventName: attended ? `Aarogya Yatra ${h.city || 'Regional'} Summit 2026` : undefined,
+            yatraCity: updatedYatra.city,
+            yatraEventDate: updatedYatra.date,
+            yatraEventName: updatedYatra.title
+          };
+        }
+        return h;
+      })
+    );
+
+    addToast('success', 'Yatra Event Updated', `Updated details for "${updatedYatra.title}".`);
+  };
+
+  const handleDeleteYatra = (yatraId: string) => {
+    const targetYatra = yatras.find((y) => y.id === yatraId);
+    setYatras((prev) => prev.filter((y) => y.id !== yatraId));
+
+    // Clear yatra flag on hospitals if this was their only/primary yatra
+    if (targetYatra) {
+      setHospitals((prev) =>
+        prev.map((h) => {
+          if (targetYatra.hospitalIds.includes(h.id)) {
+            return {
+              ...h,
+              yatraEventAttended: false,
+              yatraEventDate: undefined,
+              yatraCity: undefined,
+              yatraEventName: undefined
+            };
+          }
+          return h;
+        })
+      );
+    }
+
+    addToast('info', 'Yatra Deleted', `Removed "${targetYatra?.title || 'Yatra Event'}".`);
+  };
+
+  const handleAssignHospitalsToYatra = (yatraId: string, hospitalIds: string[]) => {
+    const targetYatra = yatras.find((y) => y.id === yatraId);
+    if (!targetYatra) return;
+
+    // Update Yatra's hospitalIds list
+    setYatras((prev) =>
+      prev.map((y) => {
+        if (y.id === yatraId) {
+          const combined = Array.from(new Set([...(y.hospitalIds || []), ...hospitalIds]));
+          return { ...y, hospitalIds: combined };
+        }
+        return y;
+      })
+    );
+
+    // Update hospital attributes
+    setHospitals((prev) =>
+      prev.map((h) => {
+        if (hospitalIds.includes(h.id)) {
+          return {
+            ...h,
+            yatraEventAttended: true,
+            yatraCity: targetYatra.city,
+            yatraEventDate: targetYatra.date,
+            yatraEventName: targetYatra.title,
             updatedAt: new Date().toISOString()
           };
         }
         return h;
       })
     );
-    addToast('info', 'Yatra Milestone Updated', attended ? 'Marked as Yatra attendee.' : 'Removed Yatra attendee flag.');
+
+    addToast('success', 'Hospitals Mapped to Yatra', `Mapped ${hospitalIds.length} hospital(s) to ${targetYatra.city} Yatra.`);
+  };
+
+  const handleRemoveHospitalFromYatra = (yatraId: string, hospitalId: string) => {
+    const targetYatra = yatras.find((y) => y.id === yatraId);
+    
+    setYatras((prev) =>
+      prev.map((y) => {
+        if (y.id === yatraId) {
+          return {
+            ...y,
+            hospitalIds: (y.hospitalIds || []).filter((id) => id !== hospitalId)
+          };
+        }
+        return y;
+      })
+    );
+
+    setHospitals((prev) =>
+      prev.map((h) => {
+        if (h.id === hospitalId) {
+          return {
+            ...h,
+            yatraEventAttended: false,
+            yatraCity: undefined,
+            yatraEventDate: undefined,
+            yatraEventName: undefined,
+            updatedAt: new Date().toISOString()
+          };
+        }
+        return h;
+      })
+    );
+
+    addToast('info', 'Hospital Unmapped', `Unlinked hospital from ${targetYatra?.city || 'Yatra'}.`);
   };
 
   // Export to CSV
@@ -651,21 +786,27 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 3: Admin & Training Academy & Geographies */}
+        {/* TAB 3: Admin & Training Academy & Geographies & Yatra Summits */}
         {activeTab === 'admin' && (
           <AdminTrainingTab
             cohorts={cohorts}
             hospitals={hospitals}
             states={states}
+            yatras={yatras}
             onCreateCohort={handleCreateCohort}
+            onEditCohort={handleEditCohort}
             onDeleteCohort={handleDeleteCohort}
             onEnrollHospitals={handleEnrollHospitals}
             onUpdateAttendeeStatus={handleUpdateAttendeeStatus}
+            onCreateYatra={handleCreateYatra}
+            onEditYatra={handleEditYatra}
+            onDeleteYatra={handleDeleteYatra}
+            onAssignHospitalsToYatra={handleAssignHospitalsToYatra}
+            onRemoveHospitalFromYatra={handleRemoveHospitalFromYatra}
             onAddState={handleAddState}
             onDeleteState={handleDeleteState}
             onAddCity={handleAddCity}
             onDeleteCity={handleDeleteCity}
-            onToggleYatraAttendance={handleToggleYatraAttendance}
             onSelectHospital={(hosp) => {
               setSelectedHospital(hosp);
               setActiveTab('dashboard');
