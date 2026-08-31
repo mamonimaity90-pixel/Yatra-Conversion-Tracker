@@ -12,7 +12,9 @@ import {
   ShieldCheck,
   MapPin,
   FileSpreadsheet,
-  Compass
+  Compass,
+  Radio,
+  Users2
 } from 'lucide-react';
 import { StateLocation } from '../types';
 
@@ -27,6 +29,11 @@ interface NavbarProps {
   onCityChange: (city: string) => void;
   states: StateLocation[];
   totalCount: number;
+  isSyncConnected?: boolean;
+  lastSyncTime?: string;
+  connectedClientsCount?: number;
+  onManualSync?: () => void;
+  isSyncing?: boolean;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -40,6 +47,11 @@ export const Navbar: React.FC<NavbarProps> = ({
   onCityChange,
   states,
   totalCount,
+  isSyncConnected = true,
+  lastSyncTime,
+  connectedClientsCount = 1,
+  onManualSync,
+  isSyncing = false
 }) => {
   // Aggregate all unique cities from states
   const allCities: string[] = [];
@@ -67,6 +79,33 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
                   Accreditation Pipeline
                 </span>
+
+                {/* Real-time Multi-user Live Sync Indicator & Force Refresh */}
+                <div className="flex items-center gap-1.5">
+                  <div 
+                    className="hidden sm:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200"
+                    title={`Live real-time sync active across all connected team members via shared link. Changes reflect instantly for everyone. Last sync: ${lastSyncTime || 'now'}`}
+                  >
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                    </span>
+                    <span>Live Team Sync</span>
+                  </div>
+
+                  {onManualSync && (
+                    <button
+                      id="btn-manual-sync"
+                      onClick={onManualSync}
+                      disabled={isSyncing}
+                      title="Force Refresh Data from Server"
+                      className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded-md text-slate-600 hover:text-blue-700 bg-slate-100 hover:bg-blue-50 border border-slate-200 transition-colors"
+                    >
+                      <RotateCcw className={`w-2.5 h-2.5 ${isSyncing ? 'animate-spin text-blue-600' : ''}`} />
+                      <span>{isSyncing ? 'Syncing...' : 'Sync'}</span>
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -202,3 +241,4 @@ export const Navbar: React.FC<NavbarProps> = ({
     </header>
   );
 };
+

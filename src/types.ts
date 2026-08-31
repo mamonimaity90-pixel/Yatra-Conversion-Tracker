@@ -9,6 +9,11 @@ export type CallStatus =
   | 'Won' 
   | 'Lost';
 
+export type SATStatus = 
+  | 'SAT not filled' 
+  | 'SAT filled partially' 
+  | 'SAT completed';
+
 export type AccreditationCategory = 
   | 'Certified' 
   | 'Accredited' 
@@ -53,6 +58,9 @@ export interface Hospital {
   state?: string;
   city?: string;
   callStatus: CallStatus;
+  satStatus?: SATStatus;
+  satUpdatedDate?: string;
+  satRemarks?: string;
   accreditationCategory: string;
   expiryDate: string; // Date string or "Not found"
   renewalUrgency: string; // e.g. "Expiring > 1 year", "ALREADY EXPIRED", etc.

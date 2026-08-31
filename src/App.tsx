@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Navbar } from './components/Navbar';
 import { KpiCards } from './components/KpiCards';
 import { FilterBar } from './components/FilterBar';
@@ -12,7 +12,7 @@ import { AdminTrainingTab } from './components/AdminTrainingTab';
 import { AnalyticsTab } from './components/AnalyticsTab';
 import { Toast, ToastMessage } from './components/Toast';
 import { INITIAL_HOSPITALS, INITIAL_COHORTS, INITIAL_STATES, INITIAL_YATRAS } from './data/initialHospitals';
-import { Hospital, TrainingCohort, CallStatus, InteractionRemark, StateLocation, CohortAttendee, YatraEvent } from './types';
+import { Hospital, TrainingCohort, CallStatus, SATStatus, InteractionRemark, StateLocation, CohortAttendee, YatraEvent } from './types';
 
 const HOSPITALS_STORAGE_KEY = 'yatra_conversion_hospitals_v4';
 const COHORTS_STORAGE_KEY = 'yatra_conversion_cohorts_v4';
@@ -25,87 +25,182 @@ export default function App() {
   const [viewMode, setViewMode] = useState<'table' | 'kanban'>('table');
   const [selectedCity, setSelectedCity] = useState<string>('All Cities');
   
-  // Data state with localStorage persistence
-  const [hospitals, setHospitals] = useState<Hospital[]>(() => {
-    try {
-      const saved = localStorage.getItem(HOSPITALS_STORAGE_KEY);
-      if (saved) {
-        return JSON.parse(saved);
+  // Real-time synchronization state
+  const [isSyncConnected, setIsSyncConnected] = useState<boolean>(false);
+  const [lastSyncTime, setLastSyncTime] = useState<string>('');
+  const [isManualSyncing, setIsManualSyncing] = useState<boolean>(false);
+  const serverVersionRef = useRef<number>(0);
+  const isInternalUpdatingRef = useRef<boolean>(false);
+
+  // Data state
+  const [hospitals, setHospitals] = useState<Hospital[]>(INITIAL_HOSPITALS);
+  const [cohorts, setCohorts] = useState<TrainingCohort[]>(INITIAL_COHORTS);
+  const [states, setStates] = useState<StateLocation[]>(INITIAL_STATES);
+  const [yatras, setYatras] = useState<YatraEvent[]>(INITIAL_YATRAS);
+
+  // Helper to safely apply incoming server data
+  const applyServerData = (data: any, force = false) => {
+    if (!data) return;
+    const incomingVersion = typeof data.version === 'number' ? data.version : 0;
+    
+    // Check if newer or force
+    if (force || incomingVersion >= serverVersionRef.current) {
+      if (incomingVersion > 0) {
+        serverVersionRef.current = incomingVersion;
       }
-    } catch (err) {
-      console.error('Failed to load hospitals from storage', err);
-    }
-    return INITIAL_HOSPITALS;
-  });
 
-  const [cohorts, setCohorts] = useState<TrainingCohort[]>(() => {
-    try {
-      const saved = localStorage.getItem(COHORTS_STORAGE_KEY);
-      if (saved) {
-        return JSON.parse(saved);
+      const hosp = data.hospitals || data.data?.hospitals;
+      const coh = data.cohorts || data.data?.cohorts;
+      const st = data.states || data.data?.states;
+      const yat = data.yatras || data.data?.yatras;
+
+      if (Array.isArray(hosp)) {
+        setHospitals(hosp);
+        try { localStorage.setItem(HOSPITALS_STORAGE_KEY, JSON.stringify(hosp)); } catch {}
       }
-    } catch (err) {
-      console.error('Failed to load cohorts from storage', err);
-    }
-    return INITIAL_COHORTS;
-  });
-
-  const [states, setStates] = useState<StateLocation[]>(() => {
-    try {
-      const saved = localStorage.getItem(STATES_STORAGE_KEY);
-      if (saved) {
-        return JSON.parse(saved);
+      if (Array.isArray(coh)) {
+        setCohorts(coh);
+        try { localStorage.setItem(COHORTS_STORAGE_KEY, JSON.stringify(coh)); } catch {}
       }
-    } catch (err) {
-      console.error('Failed to load states from storage', err);
-    }
-    return INITIAL_STATES;
-  });
-
-  const [yatras, setYatras] = useState<YatraEvent[]>(() => {
-    try {
-      const saved = localStorage.getItem(YATRAS_STORAGE_KEY);
-      if (saved) {
-        return JSON.parse(saved);
+      if (Array.isArray(st)) {
+        setStates(st);
+        try { localStorage.setItem(STATES_STORAGE_KEY, JSON.stringify(st)); } catch {}
       }
-    } catch (err) {
-      console.error('Failed to load yatras from storage', err);
-    }
-    return INITIAL_YATRAS;
-  });
+      if (Array.isArray(yat)) {
+        setYatras(yat);
+        try { localStorage.setItem(YATRAS_STORAGE_KEY, JSON.stringify(yat)); } catch {}
+      }
 
-  // Sync state to localStorage
-  useEffect(() => {
-    try {
-      localStorage.setItem(HOSPITALS_STORAGE_KEY, JSON.stringify(hospitals));
-    } catch (err) {
-      console.error('Failed to save hospitals to storage', err);
+      setIsSyncConnected(true);
+      setLastSyncTime(new Date().toLocaleTimeString());
     }
-  }, [hospitals]);
+  };
 
-  useEffect(() => {
+  // Fetch full data directly from server
+  const fetchFromServer = async (force = false) => {
     try {
-      localStorage.setItem(COHORTS_STORAGE_KEY, JSON.stringify(cohorts));
+      const res = await fetch('/api/tracker');
+      if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+      const data = await res.json();
+      applyServerData(data, force);
+      return true;
     } catch (err) {
-      console.error('Failed to save cohorts to storage', err);
+      console.warn('Sync fetch error:', err);
+      setIsSyncConnected(false);
+      return false;
     }
-  }, [cohorts]);
+  };
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(STATES_STORAGE_KEY, JSON.stringify(states));
-    } catch (err) {
-      console.error('Failed to save states to storage', err);
+  // Manual on-demand sync
+  const handleManualSync = async () => {
+    setIsManualSyncing(true);
+    const success = await fetchFromServer(true);
+    setIsManualSyncing(false);
+    if (success) {
+      addToast('success', 'Synchronized', 'Fetched latest real-time updates from server.');
+    } else {
+      addToast('error', 'Sync Failed', 'Could not reach server. Check network connection.');
     }
-  }, [states]);
+  };
 
+  // Initial load + Server-Sent Events (SSE) + 2.5s Background Polling Loop
   useEffect(() => {
+    // 1. Initial immediate pull
+    fetchFromServer(true);
+
+    // 2. Continuous real-time SSE listener
+    let eventSource: EventSource | null = null;
     try {
-      localStorage.setItem(YATRAS_STORAGE_KEY, JSON.stringify(yatras));
-    } catch (err) {
-      console.error('Failed to save yatras to storage', err);
+      eventSource = new EventSource('/api/tracker/stream');
+
+      eventSource.onopen = () => {
+        setIsSyncConnected(true);
+      };
+
+      const handleIncomingMessage = (event: MessageEvent) => {
+        try {
+          const payload = JSON.parse(event.data);
+          applyServerData(payload);
+        } catch (e) {
+          console.error('Error parsing SSE sync message:', e);
+        }
+      };
+
+      eventSource.addEventListener('sync', handleIncomingMessage);
+      eventSource.addEventListener('init', handleIncomingMessage);
+
+      eventSource.onerror = () => {
+        setIsSyncConnected(false);
+      };
+    } catch (e) {
+      console.warn('SSE not available, relying on polling:', e);
     }
-  }, [yatras]);
+
+    // 3. Fallback background polling (runs every 2.5 seconds to guarantee multi-user sync)
+    const pollInterval = setInterval(async () => {
+      try {
+        const vRes = await fetch('/api/tracker/version');
+        if (vRes.ok) {
+          const vData = await vRes.json();
+          if (vData.version > serverVersionRef.current) {
+            // Version changed on server by another user, pull full data
+            await fetchFromServer(true);
+          } else {
+            setIsSyncConnected(true);
+          }
+        }
+      } catch {
+        // network issue
+      }
+    }, 2500);
+
+    return () => {
+      if (eventSource) {
+        eventSource.close();
+      }
+      clearInterval(pollInterval);
+    };
+  }, []);
+
+  // Helper to persist full state to backend and trigger broadcast to all other users
+  const syncFullStateToServer = async (
+    newHospitals: Hospital[],
+    newCohorts: TrainingCohort[],
+    newStates: StateLocation[],
+    newYatras: YatraEvent[]
+  ) => {
+    // Also save in localStorage as backup
+    try {
+      localStorage.setItem(HOSPITALS_STORAGE_KEY, JSON.stringify(newHospitals));
+      localStorage.setItem(COHORTS_STORAGE_KEY, JSON.stringify(newCohorts));
+      localStorage.setItem(STATES_STORAGE_KEY, JSON.stringify(newStates));
+      localStorage.setItem(YATRAS_STORAGE_KEY, JSON.stringify(newYatras));
+    } catch (e) {
+      console.warn('LocalStorage save error:', e);
+    }
+
+    try {
+      const res = await fetch('/api/tracker/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          hospitals: newHospitals,
+          cohorts: newCohorts,
+          states: newStates,
+          yatras: newYatras
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.version) {
+          serverVersionRef.current = data.version;
+        }
+      }
+      setLastSyncTime(new Date().toLocaleTimeString());
+    } catch (err) {
+      console.error('Failed to sync state to server:', err);
+    }
+  };
 
   // Modals & Selection state
   const [selectedHospital, setSelectedHospital] = useState<Hospital | null>(null);
@@ -118,6 +213,7 @@ export default function App() {
   // Filter state
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('ALL');
+  const [selectedSat, setSelectedSat] = useState('ALL');
   const [selectedUrgency, setSelectedUrgency] = useState('ALL');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
 
@@ -139,14 +235,15 @@ export default function App() {
   const handleResetFilters = () => {
     setSearchQuery('');
     setSelectedStatus('ALL');
+    setSelectedSat('ALL');
     setSelectedUrgency('ALL');
     setSelectedCategory('ALL');
     setSelectedCity('All Cities');
   };
 
-  // Reset to default dataset
-  const handleResetAllData = () => {
-    if (window.confirm('Reset all hospital pipeline records to initial default dataset?')) {
+  // Reset to default dataset (Syncs across all users)
+  const handleResetAllData = async () => {
+    if (window.confirm('Reset all hospital pipeline records to initial default dataset for all users?')) {
       setHospitals(INITIAL_HOSPITALS);
       setCohorts(INITIAL_COHORTS);
       setStates(INITIAL_STATES);
@@ -155,7 +252,14 @@ export default function App() {
       localStorage.removeItem(COHORTS_STORAGE_KEY);
       localStorage.removeItem(STATES_STORAGE_KEY);
       localStorage.removeItem(YATRAS_STORAGE_KEY);
-      addToast('info', 'Data Reset', 'Restored initial sample data.');
+
+      try {
+        await fetch('/api/tracker/reset', { method: 'POST' });
+      } catch (err) {
+        console.error('Reset error:', err);
+      }
+
+      addToast('info', 'Data Reset', 'Restored initial dataset across all devices.');
     }
   };
 
@@ -171,6 +275,13 @@ export default function App() {
       // Status filter
       if (selectedStatus !== 'ALL' && h.callStatus !== selectedStatus) {
         return false;
+      }
+      // SAT Status filter
+      if (selectedSat !== 'ALL') {
+        const hospitalSat = h.satStatus || 'SAT not filled';
+        if (hospitalSat !== selectedSat) {
+          return false;
+        }
       }
       // Urgency filter
       if (selectedUrgency !== 'ALL' && h.renewalUrgency !== selectedUrgency) {
@@ -191,14 +302,15 @@ export default function App() {
         const matchState = (h.state || '').toLowerCase().includes(query);
         const matchRemarksText = (h.remarksText || '').toLowerCase().includes(query);
         const matchRemark = h.remarks?.some((r) => r.remark.toLowerCase().includes(query));
+        const matchSat = (h.satStatus || '').toLowerCase().includes(query);
 
-        if (!matchName && !matchFirst && !matchLast && !matchMobile && !matchCity && !matchState && !matchRemarksText && !matchRemark) {
+        if (!matchName && !matchFirst && !matchLast && !matchMobile && !matchCity && !matchState && !matchRemarksText && !matchRemark && !matchSat) {
           return false;
         }
       }
       return true;
     });
-  }, [hospitals, selectedCity, selectedStatus, selectedUrgency, selectedCategory, searchQuery]);
+  }, [hospitals, selectedCity, selectedStatus, selectedSat, selectedUrgency, selectedCategory, searchQuery]);
 
   // Keep selectedHospital synchronized if it updates
   useEffect(() => {
@@ -215,23 +327,30 @@ export default function App() {
     const newHospital: Hospital = {
       ...newHospitalData,
       id: `hosp-${Date.now()}`,
+      satStatus: newHospitalData.satStatus || 'SAT not filled',
       createdAt: new Date().toISOString().split('T')[0],
       updatedAt: new Date().toISOString().split('T')[0]
     };
 
-    setHospitals((prev) => [newHospital, ...prev]);
+    const nextHospitals = [newHospital, ...hospitals];
+    setHospitals(nextHospitals);
+    syncFullStateToServer(nextHospitals, cohorts, states, yatras);
     addToast('success', 'Hospital Added', `${newHospital.organisation} added to tracker.`);
   };
 
   const handleUpdateHospitalDetails = (updated: Hospital) => {
-    setHospitals((prev) => prev.map((h) => (h.id === updated.id ? updated : h)));
+    const nextHospitals = hospitals.map((h) => (h.id === updated.id ? updated : h));
+    setHospitals(nextHospitals);
     setSelectedHospital(updated);
+    syncFullStateToServer(nextHospitals, cohorts, states, yatras);
     addToast('success', 'Details Updated', `Updated details for ${updated.organisation}.`);
   };
 
   const handleSaveHospitalEdit = (updated: Hospital) => {
-    setHospitals((prev) => prev.map((h) => (h.id === updated.id ? updated : h)));
+    const nextHospitals = hospitals.map((h) => (h.id === updated.id ? updated : h));
+    setHospitals(nextHospitals);
     setSelectedHospital(updated);
+    syncFullStateToServer(nextHospitals, cohorts, states, yatras);
     addToast('success', 'Record Saved', `Successfully updated "${updated.organisation}".`);
   };
 
@@ -243,30 +362,38 @@ export default function App() {
     const createdHospitals: Hospital[] = newRecords.map((item, idx) => ({
       ...item,
       id: `hosp-bulk-${Date.now()}-${idx}`,
+      satStatus: item.satStatus || 'SAT not filled',
       createdAt: timestamp,
       updatedAt: timestamp,
     }));
 
+    let nextHospitals: Hospital[];
     if (mode === 'replace') {
-      setHospitals(createdHospitals);
+      nextHospitals = createdHospitals;
+      setHospitals(nextHospitals);
       addToast(
         'success',
         'Bulk Upload Complete',
         `Replaced database with ${createdHospitals.length} imported hospitals.`
       );
     } else {
-      setHospitals((prev) => [...createdHospitals, ...prev]);
+      nextHospitals = [...createdHospitals, ...hospitals];
+      setHospitals(nextHospitals);
       addToast(
         'success',
         'Bulk Upload Complete',
         `Added ${createdHospitals.length} hospitals into pipeline.`
       );
     }
+
+    syncFullStateToServer(nextHospitals, cohorts, states, yatras);
   };
 
-  const handleQuickStatusChange = (hospitalId: string, newStatus: CallStatus, e?: React.MouseEvent) => {
+  // Quick Call Status Change (Direct API + SSE Sync)
+  const handleQuickStatusChange = async (hospitalId: string, newStatus: CallStatus, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
 
+    // Optimistic UI update
     setHospitals((prev) =>
       prev.map((h) => {
         if (h.id === hospitalId) {
@@ -290,6 +417,50 @@ export default function App() {
     );
 
     addToast('success', 'Stage Updated', `Status updated to ${newStatus}`);
+
+    // Call server endpoint for instant multi-user broadcast
+    try {
+      await fetch('/api/tracker/quick-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hospitalId, callStatus: newStatus })
+      });
+    } catch (err) {
+      console.error('Failed to sync quick status:', err);
+    }
+  };
+
+  // Quick SAT Status Change (Direct API + SSE Sync)
+  const handleQuickSatStatusChange = async (hospitalId: string, newSatStatus: SATStatus, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+
+    // Optimistic UI update
+    setHospitals((prev) =>
+      prev.map((h) => {
+        if (h.id === hospitalId) {
+          return {
+            ...h,
+            satStatus: newSatStatus,
+            satUpdatedDate: new Date().toISOString().split('T')[0],
+            updatedAt: new Date().toISOString()
+          };
+        }
+        return h;
+      })
+    );
+
+    addToast('success', 'SAT Status Updated', `SAT Status set to "${newSatStatus}"`);
+
+    // Call server endpoint for instant multi-user broadcast
+    try {
+      await fetch('/api/tracker/quick-sat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hospitalId, satStatus: newSatStatus })
+      });
+    } catch (err) {
+      console.error('Failed to sync quick SAT status:', err);
+    }
   };
 
   // Add Interaction Remark
@@ -300,21 +471,21 @@ export default function App() {
       date: new Date().toISOString()
     };
 
-    setHospitals((prev) =>
-      prev.map((h) => {
-        if (h.id === hospitalId) {
-          return {
-            ...h,
-            callStatus: remarkData.callStatus,
-            remarksText: remarkData.remark,
-            updatedAt: new Date().toISOString(),
-            remarks: [newRemark, ...(h.remarks || [])]
-          };
-        }
-        return h;
-      })
-    );
+    const nextHospitals = hospitals.map((h) => {
+      if (h.id === hospitalId) {
+        return {
+          ...h,
+          callStatus: remarkData.callStatus,
+          remarksText: remarkData.remark,
+          updatedAt: new Date().toISOString(),
+          remarks: [newRemark, ...(h.remarks || [])]
+        };
+      }
+      return h;
+    });
 
+    setHospitals(nextHospitals);
+    syncFullStateToServer(nextHospitals, cohorts, states, yatras);
     addToast('success', 'Remark Logged', `Appended interaction & updated status to ${remarkData.callStatus}.`);
   };
 
@@ -327,27 +498,32 @@ export default function App() {
       attendees: []
     };
 
-    setCohorts((prev) => [newCohort, ...prev]);
+    const nextCohorts = [newCohort, ...cohorts];
+    setCohorts(nextCohorts);
+    syncFullStateToServer(hospitals, nextCohorts, states, yatras);
     addToast('success', 'Training Session Created', `"${newCohort.title}" scheduled.`);
   };
 
   const handleEditCohort = (updatedCohort: TrainingCohort) => {
-    setCohorts((prev) => prev.map((c) => (c.id === updatedCohort.id ? updatedCohort : c)));
+    const nextCohorts = cohorts.map((c) => (c.id === updatedCohort.id ? updatedCohort : c));
+    setCohorts(nextCohorts);
+    syncFullStateToServer(hospitals, nextCohorts, states, yatras);
     addToast('success', 'Training Session Updated', `"${updatedCohort.title}" updated.`);
   };
 
   const handleDeleteCohort = (cohortId: string) => {
     const cohort = cohorts.find((c) => c.id === cohortId);
-    setCohorts((prev) => prev.filter((c) => c.id !== cohortId));
+    const nextCohorts = cohorts.filter((c) => c.id !== cohortId);
     
     // Remove cohortId reference from hospitals
-    setHospitals((prev) =>
-      prev.map((h) => ({
-        ...h,
-        enrolledCohortIds: (h.enrolledCohortIds || []).filter((id) => id !== cohortId)
-      }))
-    );
+    const nextHospitals = hospitals.map((h) => ({
+      ...h,
+      enrolledCohortIds: (h.enrolledCohortIds || []).filter((id) => id !== cohortId)
+    }));
 
+    setCohorts(nextCohorts);
+    setHospitals(nextHospitals);
+    syncFullStateToServer(nextHospitals, nextCohorts, states, yatras);
     addToast('info', 'Training Deleted', `Removed "${cohort?.title || 'Cohort'}".`);
   };
 
@@ -371,35 +547,34 @@ export default function App() {
     });
 
     // Update cohort
-    setCohorts((prev) =>
-      prev.map((c) => {
-        if (c.id === cohortId) {
-          const existingIds = new Set(c.enrolledHospitalIds);
-          hospitalIds.forEach((id) => existingIds.add(id));
-          return {
-            ...c,
-            enrolledHospitalIds: Array.from(existingIds),
-            attendees: [...c.attendees, ...newAttendees]
-          };
-        }
-        return c;
-      })
-    );
+    const nextCohorts = cohorts.map((c) => {
+      if (c.id === cohortId) {
+        const existingIds = new Set(c.enrolledHospitalIds);
+        hospitalIds.forEach((id) => existingIds.add(id));
+        return {
+          ...c,
+          enrolledHospitalIds: Array.from(existingIds),
+          attendees: [...c.attendees, ...newAttendees]
+        };
+      }
+      return c;
+    });
 
     // Update hospital links
-    setHospitals((prev) =>
-      prev.map((h) => {
-        if (hospitalIds.includes(h.id)) {
-          const currentCohorts = h.enrolledCohortIds || [];
-          return {
-            ...h,
-            enrolledCohortIds: Array.from(new Set([...currentCohorts, cohortId]))
-          };
-        }
-        return h;
-      })
-    );
+    const nextHospitals = hospitals.map((h) => {
+      if (hospitalIds.includes(h.id)) {
+        const currentCohorts = h.enrolledCohortIds || [];
+        return {
+          ...h,
+          enrolledCohortIds: Array.from(new Set([...currentCohorts, cohortId]))
+        };
+      }
+      return h;
+    });
 
+    setCohorts(nextCohorts);
+    setHospitals(nextHospitals);
+    syncFullStateToServer(nextHospitals, nextCohorts, states, yatras);
     addToast('success', 'Hospitals Enrolled', `Enrolled ${hospitalIds.length} hospital(s) into "${cohort.title}".`);
   };
 
@@ -409,52 +584,51 @@ export default function App() {
     attendanceStatus: CohortAttendee['attendanceStatus'],
     postTrainingStatus: CallStatus
   ) => {
-    setCohorts((prev) =>
-      prev.map((c) => {
-        if (c.id === cohortId) {
-          return {
-            ...c,
-            attendees: c.attendees.map((att) => {
-              if (att.hospitalId === hospitalId) {
-                return {
-                  ...att,
-                  attendanceStatus,
-                  postTrainingStatus,
-                  convertedDate: postTrainingStatus === 'Won' ? new Date().toISOString() : att.convertedDate
-                };
-              }
-              return att;
-            })
-          };
-        }
-        return c;
-      })
-    );
+    const nextCohorts = cohorts.map((c) => {
+      if (c.id === cohortId) {
+        return {
+          ...c,
+          attendees: c.attendees.map((att) => {
+            if (att.hospitalId === hospitalId) {
+              return {
+                ...att,
+                attendanceStatus,
+                postTrainingStatus,
+                convertedDate: postTrainingStatus === 'Won' ? new Date().toISOString() : att.convertedDate
+              };
+            }
+            return att;
+          })
+        };
+      }
+      return c;
+    });
 
     // Also synchronize hospital's main call status
-    setHospitals((prev) =>
-      prev.map((h) => {
-        if (h.id === hospitalId && h.callStatus !== postTrainingStatus) {
-          const logRemark: InteractionRemark = {
-            id: `rem-post-train-${Date.now()}`,
-            date: new Date().toISOString(),
-            author: 'Training Academy Lead',
-            callStatus: postTrainingStatus,
-            remark: `Status updated to ${postTrainingStatus} following training attendance (${attendanceStatus}).`,
-            channel: 'In-Person Visit',
-            tags: ['Post-Training Efficacy']
-          };
-          return {
-            ...h,
-            callStatus: postTrainingStatus,
-            updatedAt: new Date().toISOString(),
-            remarks: [logRemark, ...(h.remarks || [])]
-          };
-        }
-        return h;
-      })
-    );
+    const nextHospitals = hospitals.map((h) => {
+      if (h.id === hospitalId && h.callStatus !== postTrainingStatus) {
+        const logRemark: InteractionRemark = {
+          id: `rem-post-train-${Date.now()}`,
+          date: new Date().toISOString(),
+          author: 'Training Academy Lead',
+          callStatus: postTrainingStatus,
+          remark: `Status updated to ${postTrainingStatus} following training attendance (${attendanceStatus}).`,
+          channel: 'In-Person Visit',
+          tags: ['Post-Training Efficacy']
+        };
+        return {
+          ...h,
+          callStatus: postTrainingStatus,
+          updatedAt: new Date().toISOString(),
+          remarks: [logRemark, ...(h.remarks || [])]
+        };
+      }
+      return h;
+    });
 
+    setCohorts(nextCohorts);
+    setHospitals(nextHospitals);
+    syncFullStateToServer(nextHospitals, nextCohorts, states, yatras);
     addToast('info', 'Attendance & Conversion Updated', `Updated status to ${postTrainingStatus}.`);
   };
 
@@ -466,44 +640,48 @@ export default function App() {
       code: code.trim().toUpperCase(),
       cities: []
     };
-    setStates((prev) => [...prev, newState]);
+    const nextStates = [...states, newState];
+    setStates(nextStates);
+    syncFullStateToServer(hospitals, cohorts, nextStates, yatras);
     addToast('success', 'State Added', `Added ${name} to geographic zones.`);
   };
 
   const handleDeleteState = (stateId: string) => {
     const st = states.find((s) => s.id === stateId);
-    setStates((prev) => prev.filter((s) => s.id !== stateId));
+    const nextStates = states.filter((s) => s.id !== stateId);
+    setStates(nextStates);
+    syncFullStateToServer(hospitals, cohorts, nextStates, yatras);
     addToast('info', 'State Deleted', `Removed ${st?.name || 'state'}.`);
   };
 
   const handleAddCity = (stateId: string, cityName: string) => {
-    setStates((prev) =>
-      prev.map((s) => {
-        if (s.id === stateId) {
-          if (s.cities.includes(cityName.trim())) return s;
-          return {
-            ...s,
-            cities: [...s.cities, cityName.trim()]
-          };
-        }
-        return s;
-      })
-    );
+    const nextStates = states.map((s) => {
+      if (s.id === stateId) {
+        if (s.cities.includes(cityName.trim())) return s;
+        return {
+          ...s,
+          cities: [...s.cities, cityName.trim()]
+        };
+      }
+      return s;
+    });
+    setStates(nextStates);
+    syncFullStateToServer(hospitals, cohorts, nextStates, yatras);
     addToast('success', 'City Added', `Added ${cityName} to operations territory.`);
   };
 
   const handleDeleteCity = (stateId: string, cityName: string) => {
-    setStates((prev) =>
-      prev.map((s) => {
-        if (s.id === stateId) {
-          return {
-            ...s,
-            cities: s.cities.filter((c) => c !== cityName)
-          };
-        }
-        return s;
-      })
-    );
+    const nextStates = states.map((s) => {
+      if (s.id === stateId) {
+        return {
+          ...s,
+          cities: s.cities.filter((c) => c !== cityName)
+        };
+      }
+      return s;
+    });
+    setStates(nextStates);
+    syncFullStateToServer(hospitals, cohorts, nextStates, yatras);
     addToast('info', 'City Removed', `Removed ${cityName}.`);
   };
 
@@ -514,53 +692,58 @@ export default function App() {
       id: `yatra-${Date.now()}`
     };
 
-    setYatras((prev) => [newYatra, ...prev]);
+    const nextYatras = [newYatra, ...yatras];
+    setYatras(nextYatras);
+    syncFullStateToServer(hospitals, cohorts, states, nextYatras);
     addToast('success', 'Yatra Event Added', `Scheduled "${newYatra.title}" in ${newYatra.city}.`);
   };
 
   const handleEditYatra = (updatedYatra: YatraEvent) => {
-    setYatras((prev) => prev.map((y) => (y.id === updatedYatra.id ? updatedYatra : y)));
+    const nextYatras = yatras.map((y) => (y.id === updatedYatra.id ? updatedYatra : y));
+    setYatras(nextYatras);
 
     // Synchronize mapped hospitals
-    setHospitals((prev) =>
-      prev.map((h) => {
-        if (updatedYatra.hospitalIds.includes(h.id)) {
-          return {
-            ...h,
-            yatraCity: updatedYatra.city,
-            yatraEventDate: updatedYatra.date,
-            yatraEventName: updatedYatra.title
-          };
-        }
-        return h;
-      })
-    );
+    const nextHospitals = hospitals.map((h) => {
+      if (updatedYatra.hospitalIds.includes(h.id)) {
+        return {
+          ...h,
+          yatraCity: updatedYatra.city,
+          yatraEventDate: updatedYatra.date,
+          yatraEventName: updatedYatra.title
+        };
+      }
+      return h;
+    });
 
+    setHospitals(nextHospitals);
+    syncFullStateToServer(nextHospitals, cohorts, states, nextYatras);
     addToast('success', 'Yatra Event Updated', `Updated details for "${updatedYatra.title}".`);
   };
 
   const handleDeleteYatra = (yatraId: string) => {
     const targetYatra = yatras.find((y) => y.id === yatraId);
-    setYatras((prev) => prev.filter((y) => y.id !== yatraId));
+    const nextYatras = yatras.filter((y) => y.id !== yatraId);
+    setYatras(nextYatras);
 
     // Clear yatra flag on hospitals if this was their only/primary yatra
+    let nextHospitals = hospitals;
     if (targetYatra) {
-      setHospitals((prev) =>
-        prev.map((h) => {
-          if (targetYatra.hospitalIds.includes(h.id)) {
-            return {
-              ...h,
-              yatraEventAttended: false,
-              yatraEventDate: undefined,
-              yatraCity: undefined,
-              yatraEventName: undefined
-            };
-          }
-          return h;
-        })
-      );
+      nextHospitals = hospitals.map((h) => {
+        if (targetYatra.hospitalIds.includes(h.id)) {
+          return {
+            ...h,
+            yatraEventAttended: false,
+            yatraEventDate: undefined,
+            yatraCity: undefined,
+            yatraEventName: undefined
+          };
+        }
+        return h;
+      });
+      setHospitals(nextHospitals);
     }
 
+    syncFullStateToServer(nextHospitals, cohorts, states, nextYatras);
     addToast('info', 'Yatra Deleted', `Removed "${targetYatra?.title || 'Yatra Event'}".`);
   };
 
@@ -569,67 +752,65 @@ export default function App() {
     if (!targetYatra) return;
 
     // Update Yatra's hospitalIds list
-    setYatras((prev) =>
-      prev.map((y) => {
-        if (y.id === yatraId) {
-          const combined = Array.from(new Set([...(y.hospitalIds || []), ...hospitalIds]));
-          return { ...y, hospitalIds: combined };
-        }
-        return y;
-      })
-    );
+    const nextYatras = yatras.map((y) => {
+      if (y.id === yatraId) {
+        const combined = Array.from(new Set([...(y.hospitalIds || []), ...hospitalIds]));
+        return { ...y, hospitalIds: combined };
+      }
+      return y;
+    });
+    setYatras(nextYatras);
 
     // Update hospital attributes
-    setHospitals((prev) =>
-      prev.map((h) => {
-        if (hospitalIds.includes(h.id)) {
-          return {
-            ...h,
-            yatraEventAttended: true,
-            yatraCity: targetYatra.city,
-            yatraEventDate: targetYatra.date,
-            yatraEventName: targetYatra.title,
-            updatedAt: new Date().toISOString()
-          };
-        }
-        return h;
-      })
-    );
+    const nextHospitals = hospitals.map((h) => {
+      if (hospitalIds.includes(h.id)) {
+        return {
+          ...h,
+          yatraEventAttended: true,
+          yatraCity: targetYatra.city,
+          yatraEventDate: targetYatra.date,
+          yatraEventName: targetYatra.title,
+          updatedAt: new Date().toISOString()
+        };
+      }
+      return h;
+    });
+    setHospitals(nextHospitals);
 
+    syncFullStateToServer(nextHospitals, cohorts, states, nextYatras);
     addToast('success', 'Hospitals Mapped to Yatra', `Mapped ${hospitalIds.length} hospital(s) to ${targetYatra.city} Yatra.`);
   };
 
   const handleRemoveHospitalFromYatra = (yatraId: string, hospitalId: string) => {
     const targetYatra = yatras.find((y) => y.id === yatraId);
     
-    setYatras((prev) =>
-      prev.map((y) => {
-        if (y.id === yatraId) {
-          return {
-            ...y,
-            hospitalIds: (y.hospitalIds || []).filter((id) => id !== hospitalId)
-          };
-        }
-        return y;
-      })
-    );
+    const nextYatras = yatras.map((y) => {
+      if (y.id === yatraId) {
+        return {
+          ...y,
+          hospitalIds: (y.hospitalIds || []).filter((id) => id !== hospitalId)
+        };
+      }
+      return y;
+    });
+    setYatras(nextYatras);
 
-    setHospitals((prev) =>
-      prev.map((h) => {
-        if (h.id === hospitalId) {
-          return {
-            ...h,
-            yatraEventAttended: false,
-            yatraCity: undefined,
-            yatraEventDate: undefined,
-            yatraEventName: undefined,
-            updatedAt: new Date().toISOString()
-          };
-        }
-        return h;
-      })
-    );
+    const nextHospitals = hospitals.map((h) => {
+      if (h.id === hospitalId) {
+        return {
+          ...h,
+          yatraEventAttended: false,
+          yatraCity: undefined,
+          yatraEventDate: undefined,
+          yatraEventName: undefined,
+          updatedAt: new Date().toISOString()
+        };
+      }
+      return h;
+    });
+    setHospitals(nextHospitals);
 
+    syncFullStateToServer(nextHospitals, cohorts, states, nextYatras);
     addToast('info', 'Hospital Unmapped', `Unlinked hospital from ${targetYatra?.city || 'Yatra'}.`);
   };
 
@@ -643,7 +824,10 @@ export default function App() {
       'City',
       'State',
       'Call Status',
+      'SAT Status',
       'Yatra Attended',
+      'Yatra City',
+      'Yatra Date',
       'Accreditation Category',
       'Expiry Date',
       'Renewal Urgency',
@@ -658,7 +842,10 @@ export default function App() {
       `"${h.city || 'Bhopal'}"`,
       `"${h.state || 'Madhya Pradesh'}"`,
       `"${h.callStatus || ''}"`,
+      `"${h.satStatus || 'SAT not filled'}"`,
       `"${h.yatraEventAttended ? 'Yes' : 'No'}"`,
+      `"${h.yatraCity || ''}"`,
+      `"${h.yatraEventDate || ''}"`,
       `"${h.accreditationCategory || ''}"`,
       `"${h.expiryDate || ''}"`,
       `"${h.renewalUrgency || ''}"`,
@@ -692,6 +879,10 @@ export default function App() {
         onCityChange={setSelectedCity}
         states={states}
         totalCount={hospitals.length}
+        isSyncConnected={isSyncConnected}
+        lastSyncTime={lastSyncTime}
+        onManualSync={handleManualSync}
+        isSyncing={isManualSyncing}
       />
 
       {/* Main App Container */}
@@ -748,6 +939,8 @@ export default function App() {
               onSearchChange={setSearchQuery}
               selectedStatus={selectedStatus}
               onStatusChange={setSelectedStatus}
+              selectedSat={selectedSat}
+              onSatChange={setSelectedSat}
               selectedUrgency={selectedUrgency}
               onUrgencyChange={setSelectedUrgency}
               selectedCategory={selectedCategory}
@@ -768,6 +961,7 @@ export default function App() {
                   setIsEditModalOpen(true);
                 }}
                 onQuickStatusChange={handleQuickStatusChange}
+                onQuickSatStatusChange={handleQuickSatStatusChange}
                 onOpenAddModal={() => setIsAddModalOpen(true)}
               />
             ) : (
@@ -880,3 +1074,4 @@ export default function App() {
     </div>
   );
 }
+

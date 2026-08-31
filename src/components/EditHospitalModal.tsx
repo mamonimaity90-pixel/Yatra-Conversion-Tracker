@@ -12,7 +12,7 @@ import {
   MapPin,
   Sparkles
 } from 'lucide-react';
-import { Hospital, CallStatus, StateLocation } from '../types';
+import { Hospital, CallStatus, SATStatus, StateLocation } from '../types';
 import { calculateRenewalUrgency } from '../utils/helpers';
 
 interface EditHospitalModalProps {
@@ -39,6 +39,7 @@ export const EditHospitalModal: React.FC<EditHospitalModalProps> = ({
   const [state, setState] = useState(hospital.state || 'Madhya Pradesh');
   const [city, setCity] = useState(hospital.city || 'Bhopal');
   const [callStatus, setCallStatus] = useState<CallStatus>(hospital.callStatus);
+  const [satStatus, setSatStatus] = useState<SATStatus>(hospital.satStatus || 'SAT not filled');
   const [accreditationCategory, setAccreditationCategory] = useState(hospital.accreditationCategory || 'Not Yet Certified/Accredited');
   const [expiryDate, setExpiryDate] = useState(hospital.expiryDate || 'Not found');
   const [renewalUrgency, setRenewalUrgency] = useState(hospital.renewalUrgency || '');
@@ -57,6 +58,7 @@ export const EditHospitalModal: React.FC<EditHospitalModalProps> = ({
       setState(hospital.state || 'Madhya Pradesh');
       setCity(hospital.city || 'Bhopal');
       setCallStatus(hospital.callStatus);
+      setSatStatus(hospital.satStatus || 'SAT not filled');
       setAccreditationCategory(hospital.accreditationCategory || 'Not Yet Certified/Accredited');
       setExpiryDate(hospital.expiryDate || 'Not found');
       setRenewalUrgency(hospital.renewalUrgency || '');
@@ -101,6 +103,8 @@ export const EditHospitalModal: React.FC<EditHospitalModalProps> = ({
       state: state,
       city: city,
       callStatus: callStatus,
+      satStatus: satStatus,
+      satUpdatedDate: new Date().toISOString().split('T')[0],
       accreditationCategory: accreditationCategory.trim(),
       expiryDate: expiryDate.trim() || 'Not found',
       renewalUrgency: renewalUrgency.trim(),
@@ -293,6 +297,22 @@ export const EditHospitalModal: React.FC<EditHospitalModalProps> = ({
                 className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-800 focus:ring-2 focus:ring-blue-500 font-mono"
               />
             </div>
+          </div>
+
+          {/* SAT Filling Status */}
+          <div>
+            <label className="block font-semibold text-slate-700 mb-1">
+              SAT Filling Status
+            </label>
+            <select
+              value={satStatus}
+              onChange={(e) => setSatStatus(e.target.value as SATStatus)}
+              className="w-full p-2 bg-slate-50 border border-slate-300 rounded-lg text-slate-800 focus:ring-2 focus:ring-blue-500 font-semibold"
+            >
+              <option value="SAT not filled">○ SAT not filled</option>
+              <option value="SAT filled partially">⏳ SAT filled partially</option>
+              <option value="SAT completed">✓ SAT completed</option>
+            </select>
           </div>
 
           {/* Renewal Urgency & Yatra Touchpoint */}

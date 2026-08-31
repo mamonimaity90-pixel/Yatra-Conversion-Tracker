@@ -14,14 +14,19 @@ import {
   Plus,
   Edit2,
   Sparkles,
-  GraduationCap
+  GraduationCap,
+  CheckCircle2,
+  FileCheck,
+  CircleDot
 } from 'lucide-react';
-import { Hospital, CallStatus } from '../types';
+import { Hospital, CallStatus, SATStatus } from '../types';
 import { 
   formatDate, 
   getStatusBadgeClass, 
   getUrgencyBadgeClass, 
   getCategoryBadgeClass,
+  getSatStatusBadgeClass,
+  getSatStatusDotColor,
   getWhatsAppLink 
 } from '../utils/helpers';
 
@@ -30,6 +35,7 @@ interface HospitalTableProps {
   onSelectHospital: (hospital: Hospital) => void;
   onEditHospital?: (hospital: Hospital) => void;
   onQuickStatusChange: (hospitalId: string, newStatus: CallStatus, e: React.MouseEvent) => void;
+  onQuickSatStatusChange?: (hospitalId: string, newSatStatus: SATStatus, e: React.MouseEvent) => void;
   onOpenAddModal: () => void;
 }
 
@@ -38,6 +44,7 @@ export const HospitalTable: React.FC<HospitalTableProps> = ({
   onSelectHospital,
   onEditHospital,
   onQuickStatusChange,
+  onQuickSatStatusChange,
   onOpenAddModal,
 }) => {
   if (hospitals.length === 0) {
@@ -72,6 +79,12 @@ export const HospitalTable: React.FC<HospitalTableProps> = ({
     'Lost'
   ];
 
+  const satStatuses: SATStatus[] = [
+    'SAT not filled',
+    'SAT filled partially',
+    'SAT completed'
+  ];
+
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
       <div className="overflow-x-auto">
@@ -82,6 +95,12 @@ export const HospitalTable: React.FC<HospitalTableProps> = ({
               <th className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 min-w-[140px]">Contact Person</th>
               <th className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 min-w-[120px]">Mobile</th>
               <th className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 min-w-[130px]">Call Status</th>
+              <th className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 min-w-[155px]">
+                <div className="flex items-center gap-1">
+                  <FileCheck className="w-3 h-3 text-indigo-600" />
+                  <span>SAT Filling Status</span>
+                </div>
+              </th>
               <th className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 min-w-[140px]">Yatra (City & Date)</th>
               <th className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 min-w-[140px]">Accreditation Category</th>
               <th className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 min-w-[100px]">Expiry Date</th>
@@ -98,7 +117,7 @@ export const HospitalTable: React.FC<HospitalTableProps> = ({
                 : null;
               
               const whatsappUrl = hospital.mobile ? getWhatsAppLink(hospital.mobile, hospital.organisation, fullName) : '';
-              const trainingCount = hospital.enrolledCohortIds?.length || 0;
+              const currentSat = hospital.satStatus || 'SAT not filled';
 
               return (
                 <tr
@@ -161,6 +180,31 @@ export const HospitalTable: React.FC<HospitalTableProps> = ({
                         {callStatuses.map((st) => (
                           <option key={st} value={st} className="bg-white text-slate-800 font-normal">
                             {st}
+                          </option>
+                        ))}
+                      </select>
+                      <span className="pointer-events-none absolute inset-y-0 right-1.5 flex items-center text-[8px] text-slate-500">
+                        ▼
+                      </span>
+                    </div>
+                  </td>
+
+                  {/* SAT Filling Status (Interactive Dropdown) */}
+                  <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                    <div className="relative inline-block text-left">
+                      <select
+                        id={`select-sat-${hospital.id}`}
+                        value={currentSat}
+                        onChange={(e) => {
+                          if (onQuickSatStatusChange) {
+                            onQuickSatStatusChange(hospital.id, e.target.value as SATStatus, e as any);
+                          }
+                        }}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] cursor-pointer focus:ring-2 focus:ring-blue-500 appearance-none pr-6 transition-all ${getSatStatusBadgeClass(currentSat)}`}
+                      >
+                        {satStatuses.map((sat) => (
+                          <option key={sat} value={sat} className="bg-white text-slate-800 font-normal">
+                            {sat === 'SAT completed' ? '✓ SAT completed' : sat === 'SAT filled partially' ? '⏳ SAT filled partially' : '○ SAT not filled'}
                           </option>
                         ))}
                       </select>
@@ -260,13 +304,12 @@ export const HospitalTable: React.FC<HospitalTableProps> = ({
           Showing <span className="font-semibold text-slate-700">{hospitals.length}</span> hospital entries
         </div>
         <div className="flex items-center gap-3">
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-orange-500"></span> Hot</span>
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500"></span> Warm</span>
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500"></span> AIP</span>
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-600"></span> Won</span>
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-slate-400"></span> Cold</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500"></span> SAT completed</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500"></span> SAT partially filled</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-slate-400"></span> SAT not filled</span>
         </div>
       </div>
     </div>
   );
 };
+

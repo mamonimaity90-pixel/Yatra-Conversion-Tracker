@@ -130,6 +130,27 @@ export function getUrgencyBadgeClass(urgency: string): string {
   return 'bg-slate-100 text-slate-600 text-[10px]';
 }
 
+export function getSatStatusBadgeClass(status?: string): string {
+  const norm = (status || '').toLowerCase();
+  if (norm.includes('completed')) {
+    return 'bg-emerald-50 text-emerald-700 border border-emerald-300 font-bold';
+  }
+  if (norm.includes('partial') || norm.includes('partially')) {
+    return 'bg-amber-50 text-amber-800 border border-amber-300 font-bold';
+  }
+  if (norm.includes('not filled')) {
+    return 'bg-slate-100 text-slate-600 border border-slate-200 font-medium';
+  }
+  return 'bg-slate-100 text-slate-600 border border-slate-200 font-medium';
+}
+
+export function getSatStatusDotColor(status?: string): string {
+  const norm = (status || '').toLowerCase();
+  if (norm.includes('completed')) return 'bg-emerald-500';
+  if (norm.includes('partial') || norm.includes('partially')) return 'bg-amber-500';
+  return 'bg-slate-400';
+}
+
 export function getCategoryBadgeClass(cat: string): string {
   const norm = (cat || '').toLowerCase();
   if (norm.includes('accreditation under process')) {
