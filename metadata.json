@@ -1,0 +1,6 @@
+{
+  "name": "Yatra Conversion Tracker",
+  "description": "Interactive hospital accreditation conversion dashboard and admin management portal for tracking healthcare accreditations, calls, remarks, and training cohorts across Indian cities.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
