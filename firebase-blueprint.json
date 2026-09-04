@@ -1,0 +1,54 @@
+{
+  "entities": {
+    "Hospital": {
+      "title": "Hospital",
+      "description": "Hospital record tracking accreditation conversion pipeline and SAT status",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "organisation": { "type": "string" },
+        "firstName": { "type": "string" },
+        "lastName": { "type": "string" },
+        "mobile": { "type": "string" },
+        "state": { "type": "string" },
+        "city": { "type": "string" },
+        "callStatus": { "type": "string" },
+        "satStatus": { "type": "string" },
+        "satUpdatedDate": { "type": "string" },
+        "accreditationCategory": { "type": "string" },
+        "expiryDate": { "type": "string" },
+        "renewalUrgency": { "type": "string" },
+        "yatraEventAttended": { "type": "boolean" },
+        "yatraEventDate": { "type": "string" },
+        "yatraEventName": { "type": "string" },
+        "yatraCity": { "type": "string" },
+        "convertedDate": { "type": "string" },
+        "remarksText": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "organisation", "callStatus", "satStatus"]
+    },
+    "TrackerConfig": {
+      "title": "TrackerConfig",
+      "description": "Shared configurations including cohorts, states, and yatras",
+      "type": "object",
+      "properties": {
+        "version": { "type": "number" },
+        "lastUpdated": { "type": "string" },
+        "updatedBy": { "type": "string" }
+      },
+      "required": ["version", "lastUpdated"]
+    }
+  },
+  "firestore": {
+    "/hospitals/{hospitalId}": {
+      "schema": "Hospital",
+      "description": "Collection of all hospital records in the conversion pipeline"
+    },
+    "/config/{configId}": {
+      "schema": "TrackerConfig",
+      "description": "Global tracker configurations and metadata"
+    }
+  }
+}

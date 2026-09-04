@@ -1,0 +1,27 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Hospital records collection: shared accreditation tracking across all team advisors
+    match /hospitals/{hospitalId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Tracker metadata & configurations
+    match /config/{configId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /metadata/{docId} {
+      allow read: if true;
+      allow write: if true;
+    }
+  }
+}

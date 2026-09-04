@@ -13,6 +13,20 @@ import { AnalyticsTab } from './components/AnalyticsTab';
 import { Toast, ToastMessage } from './components/Toast';
 import { INITIAL_HOSPITALS, INITIAL_COHORTS, INITIAL_STATES, INITIAL_YATRAS } from './data/initialHospitals';
 import { Hospital, TrainingCohort, CallStatus, SATStatus, InteractionRemark, StateLocation, CohortAttendee, YatraEvent } from './types';
+import {
+  testFirestoreConnection,
+  seedInitialHospitalsIfEmpty,
+  subscribeToHospitals,
+  subscribeToConfig,
+  updateHospitalSatStatus,
+  updateHospitalCallStatus,
+  saveHospitalDoc,
+  saveAppConfig,
+  auth,
+  loginWithGoogle,
+  logoutUser
+} from './lib/firebase';
+import { onAuthStateChanged, User } from 'firebase/auth';
 
 const HOSPITALS_STORAGE_KEY = 'yatra_conversion_hospitals_v4';
 const COHORTS_STORAGE_KEY = 'yatra_conversion_cohorts_v4';
@@ -29,8 +43,17 @@ export default function App() {
   const [isSyncConnected, setIsSyncConnected] = useState<boolean>(false);
   const [lastSyncTime, setLastSyncTime] = useState<string>('');
   const [isManualSyncing, setIsManualSyncing] = useState<boolean>(false);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const serverVersionRef = useRef<number>(0);
   const isInternalUpdatingRef = useRef<boolean>(false);
+
+  // Monitor Google Authentication State
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (u) => {
+      setCurrentUser(u);
+    });
+    return () => unsub();
+  }, []);
 
   // Data state with instant localStorage cache fallback
   const [hospitals, setHospitals] = useState<Hospital[]>(() => {
@@ -136,21 +159,91 @@ export default function App() {
   // Manual on-demand sync
   const handleManualSync = async () => {
     setIsManualSyncing(true);
-    const success = await fetchFromServer(true);
+    let cloudSynced = false;
+    try {
+      const connected = await testFirestoreConnection();
+      if (connected) {
+        setIsSyncConnected(true);
+        await seedInitialHospitalsIfEmpty(INITIAL_HOSPITALS, cohorts, states, yatras);
+        cloudSynced = true;
+      }
+    } catch {}
+
+    const serverSynced = await fetchFromServer(true);
     setIsManualSyncing(false);
-    if (success) {
-      addToast('success', 'Synchronized', 'Fetched latest real-time updates from server.');
+
+    if (cloudSynced || serverSynced) {
+      addToast('success', 'Live Cloud Sync', 'Synchronized real-time records with Google Cloud Firestore.');
     } else {
-      addToast('error', 'Sync Failed', 'Could not reach server. Check network connection.');
+      addToast('error', 'Sync Failed', 'Could not reach cloud database. Operating with local cache.');
     }
   };
 
-  // Initial load + Server-Sent Events (SSE) + 2.5s Background Polling Loop
+  // Initial load + Real-time Cloud Firestore listener + Cross-window bus + SSE fallback
   useEffect(() => {
-    // 1. Initial immediate pull
+    // 1. Check Cloud Firestore connection and seed baseline if empty
+    testFirestoreConnection().then(async (connected) => {
+      if (connected) {
+        setIsSyncConnected(true);
+        await seedInitialHospitalsIfEmpty(INITIAL_HOSPITALS, cohorts, states, yatras);
+      }
+    });
+
+    // 2. Real-time Firestore subscription to hospitals
+    const unsubHospitals = subscribeToHospitals(
+      (liveHospitals) => {
+        if (liveHospitals && liveHospitals.length > 0) {
+          setHospitals(liveHospitals);
+          setIsSyncConnected(true);
+          setLastSyncTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+          try {
+            localStorage.setItem(HOSPITALS_STORAGE_KEY, JSON.stringify(liveHospitals));
+          } catch {}
+        }
+      },
+      (err) => {
+        console.warn('Firestore subscription fallback:', err);
+      }
+    );
+
+    // 3. Real-time Firestore subscription to shared config
+    const unsubConfig = subscribeToConfig((liveConfig) => {
+      if (liveConfig.cohorts && Array.isArray(liveConfig.cohorts)) setCohorts(liveConfig.cohorts);
+      if (liveConfig.states && Array.isArray(liveConfig.states)) setStates(liveConfig.states);
+      if (liveConfig.yatras && Array.isArray(liveConfig.yatras)) setYatras(liveConfig.yatras);
+    });
+
+    // 4. Initial server pull fallback
     fetchFromServer(true);
 
-    // 2. Continuous real-time SSE listener
+    // 5. Cross-Window / Multi-Tab Synchronization via BroadcastChannel and Storage Events
+    let syncChannel: BroadcastChannel | null = null;
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      try {
+        syncChannel = new BroadcastChannel('yatra_tracker_sync_bus');
+        syncChannel.onmessage = (event) => {
+          if (event.data) {
+            applyServerData(event.data, true);
+          }
+        };
+      } catch (e) {
+        console.warn('BroadcastChannel setup error:', e);
+      }
+    }
+
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === HOSPITALS_STORAGE_KEY && e.newValue) {
+        try {
+          const newHosp = JSON.parse(e.newValue);
+          if (Array.isArray(newHosp)) {
+            setHospitals(newHosp);
+          }
+        } catch {}
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+
+    // 6. Continuous real-time SSE listener
     let eventSource: EventSource | null = null;
     try {
       eventSource = new EventSource('/api/tracker/stream');
@@ -172,37 +265,51 @@ export default function App() {
       eventSource.addEventListener('init', handleIncomingMessage);
 
       eventSource.onerror = () => {
-        setIsSyncConnected(false);
+        // Do not immediately drop to disconnected on transient reconnects
       };
     } catch (e) {
       console.warn('SSE not available, relying on polling:', e);
     }
 
-    // 3. Fallback background polling (runs every 2.5 seconds to guarantee multi-user sync)
+    // 7. Background polling loop (checks server version every 3s)
     const pollInterval = setInterval(async () => {
       try {
         const vRes = await fetch('/api/tracker/version');
         if (vRes.ok) {
           const vData = await vRes.json();
+          setIsSyncConnected(true);
           if (vData.version > serverVersionRef.current) {
             // Version changed on server by another user, pull full data
             await fetchFromServer(true);
-          } else {
-            setIsSyncConnected(true);
           }
         }
-      } catch {
-        // network issue
-      }
-    }, 2500);
+      } catch {}
+    }, 3000);
 
     return () => {
+      unsubHospitals();
+      unsubConfig();
+      if (syncChannel) {
+        try { syncChannel.close(); } catch {}
+      }
+      window.removeEventListener('storage', handleStorageChange);
       if (eventSource) {
         eventSource.close();
       }
       clearInterval(pollInterval);
     };
   }, []);
+
+  // Broadcast changes across tabs immediately
+  const broadcastLocalChange = (hosp: Hospital[]) => {
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        const bc = new BroadcastChannel('yatra_tracker_sync_bus');
+        bc.postMessage({ hospitals: hosp, version: Date.now() });
+        bc.close();
+      }
+    } catch {}
+  };
 
   // Helper to persist full state to backend and trigger broadcast to all other users
   const syncFullStateToServer = async (
@@ -211,6 +318,9 @@ export default function App() {
     newStates: StateLocation[],
     newYatras: YatraEvent[]
   ) => {
+    // Broadcast immediately across open tabs/windows
+    broadcastLocalChange(newHospitals);
+
     // Also save in localStorage as backup
     try {
       localStorage.setItem(HOSPITALS_STORAGE_KEY, JSON.stringify(newHospitals));
@@ -220,6 +330,10 @@ export default function App() {
     } catch (e) {
       console.warn('LocalStorage save error:', e);
     }
+
+    // Persist config to Cloud Firestore
+    const authorName = currentUser?.displayName || currentUser?.email?.split('@')[0] || 'Advisor';
+    saveAppConfig(newCohorts, newStates, newYatras, authorName).catch(() => {});
 
     try {
       const res = await fetch('/api/tracker/sync', {
@@ -431,9 +545,11 @@ export default function App() {
     syncFullStateToServer(nextHospitals, cohorts, states, yatras);
   };
 
-  // Quick Call Status Change (Direct API + SSE Sync)
+  // Quick Call Status Change (Direct Cloud Firestore + API + SSE Sync)
   const handleQuickStatusChange = async (hospitalId: string, newStatus: CallStatus, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
+
+    const authorName = currentUser?.displayName || currentUser?.email?.split('@')[0] || 'Advisor';
 
     // Optimistic UI update
     setHospitals((prev) => {
@@ -442,7 +558,7 @@ export default function App() {
           const newRemark: InteractionRemark = {
             id: `rem-quick-${Date.now()}`,
             date: new Date().toISOString(),
-            author: 'Advisor',
+            author: authorName,
             callStatus: newStatus,
             remark: `Quick status updated from ${h.callStatus} to ${newStatus}.`,
             channel: 'Phone Call',
@@ -457,12 +573,18 @@ export default function App() {
         return h;
       });
       try { localStorage.setItem(HOSPITALS_STORAGE_KEY, JSON.stringify(updated)); } catch {}
+      broadcastLocalChange(updated);
       return updated;
     });
 
     addToast('success', 'Stage Updated', `Status updated to ${newStatus}`);
 
-    // Call server endpoint for instant multi-user broadcast
+    // Update Cloud Firestore directly - instantly streams to all devices worldwide!
+    updateHospitalCallStatus(hospitalId, newStatus, authorName).catch((err) => {
+      console.warn('Firestore quick-status warning:', err);
+    });
+
+    // Also notify server endpoint as fallback
     try {
       await fetch('/api/tracker/quick-status', {
         method: 'POST',
@@ -474,9 +596,11 @@ export default function App() {
     }
   };
 
-  // Quick SAT Status Change (Direct API + SSE Sync)
+  // Quick SAT Status Change (Direct Cloud Firestore + API + SSE Sync)
   const handleQuickSatStatusChange = async (hospitalId: string, newSatStatus: SATStatus, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
+
+    const authorName = currentUser?.displayName || currentUser?.email?.split('@')[0] || 'Advisor';
 
     // Optimistic UI update
     setHospitals((prev) => {
@@ -492,12 +616,18 @@ export default function App() {
         return h;
       });
       try { localStorage.setItem(HOSPITALS_STORAGE_KEY, JSON.stringify(updated)); } catch {}
+      broadcastLocalChange(updated);
       return updated;
     });
 
     addToast('success', 'SAT Status Updated', `SAT Status set to "${newSatStatus}"`);
 
-    // Call server endpoint for instant multi-user broadcast
+    // Update Cloud Firestore directly - instantly streams to all devices worldwide!
+    updateHospitalSatStatus(hospitalId, newSatStatus, authorName).catch((err) => {
+      console.warn('Firestore quick-sat warning:', err);
+    });
+
+    // Also notify server endpoint as fallback
     try {
       await fetch('/api/tracker/quick-sat', {
         method: 'POST',
@@ -957,6 +1087,9 @@ export default function App() {
         lastSyncTime={lastSyncTime}
         onManualSync={handleManualSync}
         isSyncing={isManualSyncing}
+        user={currentUser}
+        onLogin={loginWithGoogle}
+        onLogout={logoutUser}
       />
 
       {/* Main App Container */}
