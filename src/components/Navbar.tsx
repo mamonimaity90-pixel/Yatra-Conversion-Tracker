@@ -82,16 +82,26 @@ export const Navbar: React.FC<NavbarProps> = ({
 
                 {/* Real-time Multi-user Live Sync Indicator & Force Refresh */}
                 <div className="flex items-center gap-1.5">
-                  <div 
-                    className="hidden sm:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200"
-                    title={`Live real-time sync active across all connected team members via shared link. Changes reflect instantly for everyone. Last sync: ${lastSyncTime || 'now'}`}
-                  >
-                    <span className="relative flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                    </span>
-                    <span>Live Team Sync</span>
-                  </div>
+                  {isSyncConnected ? (
+                    <div 
+                      className="hidden sm:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200"
+                      title={`Live real-time sync active across all connected team members. Changes reflect instantly. Last sync: ${lastSyncTime || 'now'}`}
+                    >
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                      </span>
+                      <span>Live Team Sync</span>
+                    </div>
+                  ) : (
+                    <div 
+                      className="hidden sm:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-200"
+                      title="Operating with local cache. Click Sync to pull latest server updates."
+                    >
+                      <span className="h-2 w-2 rounded-full bg-amber-500"></span>
+                      <span>Cached Mode</span>
+                    </div>
+                  )}
 
                   {onManualSync && (
                     <button

@@ -32,19 +32,57 @@ export default function App() {
   const serverVersionRef = useRef<number>(0);
   const isInternalUpdatingRef = useRef<boolean>(false);
 
-  // Data state
-  const [hospitals, setHospitals] = useState<Hospital[]>(INITIAL_HOSPITALS);
-  const [cohorts, setCohorts] = useState<TrainingCohort[]>(INITIAL_COHORTS);
-  const [states, setStates] = useState<StateLocation[]>(INITIAL_STATES);
-  const [yatras, setYatras] = useState<YatraEvent[]>(INITIAL_YATRAS);
+  // Data state with instant localStorage cache fallback
+  const [hospitals, setHospitals] = useState<Hospital[]>(() => {
+    try {
+      const cached = localStorage.getItem(HOSPITALS_STORAGE_KEY);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch {}
+    return INITIAL_HOSPITALS;
+  });
+  const [cohorts, setCohorts] = useState<TrainingCohort[]>(() => {
+    try {
+      const cached = localStorage.getItem(COHORTS_STORAGE_KEY);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return INITIAL_COHORTS;
+  });
+  const [states, setStates] = useState<StateLocation[]>(() => {
+    try {
+      const cached = localStorage.getItem(STATES_STORAGE_KEY);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return INITIAL_STATES;
+  });
+  const [yatras, setYatras] = useState<YatraEvent[]>(() => {
+    try {
+      const cached = localStorage.getItem(YATRAS_STORAGE_KEY);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return INITIAL_YATRAS;
+  });
 
   // Helper to safely apply incoming server data
   const applyServerData = (data: any, force = false) => {
     if (!data) return;
     const incomingVersion = typeof data.version === 'number' ? data.version : 0;
     
-    // Check if newer or force
-    if (force || incomingVersion >= serverVersionRef.current) {
+    // Check if newer or force or initial zero version
+    if (force || incomingVersion >= serverVersionRef.current || serverVersionRef.current === 0) {
       if (incomingVersion > 0) {
         serverVersionRef.current = incomingVersion;
       }
@@ -81,6 +119,10 @@ export default function App() {
     try {
       const res = await fetch('/api/tracker');
       if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+      const contentType = res.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('Non-JSON response from server (possible auth redirect)');
+      }
       const data = await res.json();
       applyServerData(data, force);
       return true;
@@ -394,8 +436,8 @@ export default function App() {
     if (e) e.stopPropagation();
 
     // Optimistic UI update
-    setHospitals((prev) =>
-      prev.map((h) => {
+    setHospitals((prev) => {
+      const updated = prev.map((h) => {
         if (h.id === hospitalId) {
           const newRemark: InteractionRemark = {
             id: `rem-quick-${Date.now()}`,
@@ -413,8 +455,10 @@ export default function App() {
           };
         }
         return h;
-      })
-    );
+      });
+      try { localStorage.setItem(HOSPITALS_STORAGE_KEY, JSON.stringify(updated)); } catch {}
+      return updated;
+    });
 
     addToast('success', 'Stage Updated', `Status updated to ${newStatus}`);
 
@@ -435,8 +479,8 @@ export default function App() {
     if (e) e.stopPropagation();
 
     // Optimistic UI update
-    setHospitals((prev) =>
-      prev.map((h) => {
+    setHospitals((prev) => {
+      const updated = prev.map((h) => {
         if (h.id === hospitalId) {
           return {
             ...h,
@@ -446,8 +490,10 @@ export default function App() {
           };
         }
         return h;
-      })
-    );
+      });
+      try { localStorage.setItem(HOSPITALS_STORAGE_KEY, JSON.stringify(updated)); } catch {}
+      return updated;
+    });
 
     addToast('success', 'SAT Status Updated', `SAT Status set to "${newSatStatus}"`);
 

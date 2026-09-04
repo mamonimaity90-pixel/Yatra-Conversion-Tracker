@@ -1,7 +1,7 @@
 {
-  "version": 4,
-  "lastUpdated": "2026-08-31T07:41:12.677Z",
-  "updatedBy": "Lead Coordinator",
+  "version": 5,
+  "lastUpdated": "2026-09-04T05:36:10.296Z",
+  "updatedBy": "Team Advisor",
   "hospitals": [
     {
       "id": "hosp-sheet-1",
@@ -19,6 +19,17 @@
       "enrolledCohortIds": [],
       "remarks": [
         {
+          "id": "rem-sat-1788500170296",
+          "date": "2026-09-04T05:36:10.296Z",
+          "author": "Advisor",
+          "callStatus": "Engaged",
+          "remark": "SAT Filling Status updated to \"SAT completed\" (was \"SAT completed\").",
+          "channel": "Phone Call",
+          "tags": [
+            "SAT Status"
+          ]
+        },
+        {
           "id": "rem-init-1",
           "date": "2026-08-19T00:00:00Z",
           "author": "Advisor Call Log",
@@ -29,8 +40,9 @@
       ],
       "remarksText": "Disconnected the call saying he is busy",
       "createdAt": "2026-08-19",
-      "updatedAt": "2026-08-19",
-      "satStatus": "SAT completed"
+      "updatedAt": "2026-09-04T05:36:10.296Z",
+      "satStatus": "SAT completed",
+      "satUpdatedDate": "2026-09-04T05:36:10.296Z"
     },
     {
       "id": "hosp-sheet-2",
